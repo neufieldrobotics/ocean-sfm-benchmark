@@ -3,7 +3,7 @@
 from extractors.superpoint_superglue import SuperPointSuperGlueExtractor
 from extractors.lightglue_extractor import LightGlueExtractor
 from extractors.dense_extractor import DenseExtractor
-from extractors.sift_native import SIFTNativeExtractor
+from extractors.sift_native import NativeColmapExtractor
 
 
 def get_extractor(method, device="cuda"):
@@ -14,9 +14,14 @@ def get_extractor(method, device="cuda"):
         device: torch device string.
 
     Returns:
-        Extractor instance, or SIFTNativeExtractor for "sift".
+        Extractor instance. NativeColmapExtractor for sift/aliked,
+        custom extractors for everything else.
     """
     factories = {
+        # Native COLMAP (automatic_reconstructor handles full pipeline)
+        "sift": lambda: NativeColmapExtractor("sift"),
+        "aliked": lambda: NativeColmapExtractor("aliked"),
+        # Custom extractors (DB injection + our mapper/MVS)
         "superpoint+superglue": lambda: SuperPointSuperGlueExtractor(device),
         "superpoint+lightglue": lambda: LightGlueExtractor("superpoint", device),
         "aliked+lightglue": lambda: LightGlueExtractor("aliked", device),
@@ -24,7 +29,6 @@ def get_extractor(method, device="cuda"):
         "loftr": lambda: DenseExtractor("loftr", device),
         "roma": lambda: DenseExtractor("roma", device),
         "dkm": lambda: DenseExtractor("dkm", device),
-        "sift": lambda: SIFTNativeExtractor(),
     }
 
     if method not in factories:
@@ -36,6 +40,7 @@ def get_extractor(method, device="cuda"):
 
 AVAILABLE_METHODS = [
     "sift",
+    "aliked",
     "superpoint+superglue",
     "superpoint+lightglue",
     "aliked+lightglue",

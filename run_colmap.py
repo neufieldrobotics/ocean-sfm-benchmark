@@ -2,20 +2,23 @@
 """Single entry point for COLMAP reconstruction with any feature method.
 
 Usage:
-    python run_colmap.py --method aliked+lightglue --images ./Section-25-PNGs-Win
+    python run_colmap.py --method sift --images ./Section-25-PNGs-Win
+    python run_colmap.py --method aliked --images ./Section-25-PNGs-Win
     python run_colmap.py --method superpoint+superglue --images ./images --output ./recon
+    python run_colmap.py --method disk+lightglue --images ./images --skip-dense
     python run_colmap.py --method loftr,roma --images ./images
     python run_colmap.py --method all --images ./images --output ./results
-    python run_colmap.py --method disk+lightglue --images ./images --skip-dense
 """
 
 import argparse
+import os
+import shutil
 import torch
 from pathlib import Path
 
 from config import DEVICE
 from extractors import get_extractor, AVAILABLE_METHODS
-from extractors.sift_native import SIFTNativeExtractor
+from extractors.sift_native import NativeColmapExtractor
 from colmap_db import ColmapDatabase
 from colmap_pipeline import (
     setup_output_dirs, discover_images,
@@ -24,21 +27,34 @@ from colmap_pipeline import (
 )
 
 
-def run_single_method(method, image_dir, output_dir, skip_dense=False):
+def run_single_method(method, image_dir, output_dir, skip_dense=False,
+                      quality="high"):
     """Run full COLMAP pipeline for one method."""
     print(f"\n{'='*70}")
     print(f"  Running: {method}")
     print(f"{'='*70}")
 
     image_dir = str(Path(image_dir).resolve())
-    output_dir, db_path, sparse_path, dense_path = setup_output_dirs(output_dir)
-    image_paths = discover_images(image_dir)
-
     device = DEVICE
     extractor = get_extractor(method, device)
 
-    if isinstance(extractor, SIFTNativeExtractor):
-        # Native COLMAP SIFT handles DB creation, extraction, and matching
+    if isinstance(extractor, NativeColmapExtractor) and extractor.runs_full_pipeline:
+        # SIFT: automatic_reconstructor handles everything
+        output_dir = str(Path(output_dir).resolve())
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+        extractor.run(image_dir, output_dir, quality=quality,
+                      skip_dense=skip_dense)
+        print(f"\nDone: {method}")
+        print(f"Output: {output_dir}")
+        return
+
+    # All other methods: we handle DB + mapper + MVS
+    output_dir, db_path, sparse_path, dense_path = setup_output_dirs(output_dir)
+    image_paths = discover_images(image_dir)
+
+    if isinstance(extractor, NativeColmapExtractor):
+        # ALIKED: native extraction + matching, but we run mapper/MVS
         extractor.run(image_dir, db_path)
     elif extractor.is_dense:
         db = ColmapDatabase(db_path)
@@ -75,6 +91,9 @@ def main():
                         help="Output directory (default: ./results/<method>_reconstruction)")
     parser.add_argument("--skip-dense", action="store_true",
                         help="Skip dense reconstruction (MVS) stages")
+    parser.add_argument("--quality", default="high",
+                        choices=["low", "medium", "high", "extreme"],
+                        help="Quality level for native COLMAP methods (default: high)")
     args = parser.parse_args()
 
     # Parse methods
@@ -94,7 +113,8 @@ def main():
             output_dir = f"{base}/{method}_reconstruction"
 
         try:
-            run_single_method(method, args.images, output_dir, args.skip_dense)
+            run_single_method(method, args.images, output_dir,
+                              args.skip_dense, args.quality)
         except Exception as e:
             print(f"\nERROR running {method}: {e}")
             import traceback

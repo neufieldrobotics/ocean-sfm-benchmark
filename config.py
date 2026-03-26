@@ -9,7 +9,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 COLMAP_BIN = "colmap"
 
 # SuperPoint + SuperGlue
-SP_MAX_DIM = 1600
+SP_MAX_DIM = 3200
 SP_MAX_KEYPOINTS = -1
 SP_KEYPOINT_THRESHOLD = 0.05
 SP_NMS_RADIUS = 3
