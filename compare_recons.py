@@ -154,12 +154,15 @@ def extract_metrics(recon_path):
             obs_per_image.append(n_obs)
 
         # Extract poses for angle analysis
+        # pycolmap 3.13: cam_from_world() is a method, rotation.quat is xyzw order
         image_poses = {}
         for img_id, img in images.items():
+            cfw = img.cam_from_world()
+            quat_xyzw = cfw.rotation.quat
             image_poses[img.name] = {
-                "qvec": np.array([img.cam_from_world.rotation.quat[3],  # w
-                                  *img.cam_from_world.rotation.quat[:3]]),  # x,y,z
-                "tvec": np.array(img.cam_from_world.translation),
+                "qvec": np.array([quat_xyzw[3], quat_xyzw[0],
+                                  quat_xyzw[1], quat_xyzw[2]]),  # convert to wxyz
+                "tvec": np.array(cfw.translation),
             }
     else:
         pts = read_points3D_bin(recon_path / "points3D.bin")
@@ -355,8 +358,20 @@ def _analyze_viewing_angles(all_metrics, labels, output_dir):
         angles = np.array(angles)
         baselines = np.array(baselines)
 
-        axes[0].hist(angles, bins=20, alpha=0.5, label=label, color=colors[idx])
-        axes[1].hist(baselines, bins=20, alpha=0.5, label=label, color=colors[idx])
+        # Use KDE-style line plot: sorted CDF / density curve
+        angle_bins = np.linspace(0, max(angles.max(), 1), 30)
+        baseline_bins = np.linspace(0, max(baselines.max(), 1e-6), 30)
+
+        angle_counts, angle_edges = np.histogram(angles, bins=angle_bins)
+        baseline_counts, baseline_edges = np.histogram(baselines, bins=baseline_bins)
+
+        angle_centers = (angle_edges[:-1] + angle_edges[1:]) / 2
+        baseline_centers = (baseline_edges[:-1] + baseline_edges[1:]) / 2
+
+        axes[0].plot(angle_centers, angle_counts, marker='o', markersize=3,
+                     linewidth=2, label=label, color=colors[idx])
+        axes[1].plot(baseline_centers, baseline_counts, marker='o', markersize=3,
+                     linewidth=2, label=label, color=colors[idx])
 
         print(f"  {label}: {len(poses)} poses, angle range: "
               f"{angles.min():.1f}-{angles.max():.1f} deg, "
@@ -366,17 +381,146 @@ def _analyze_viewing_angles(all_metrics, labels, output_dir):
     axes[0].set_ylabel("Count")
     axes[0].set_title("Pairwise Viewing Angle Distribution")
     axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
 
     axes[1].set_xlabel("Baseline Distance")
     axes[1].set_ylabel("Count")
     axes[1].set_title("Pairwise Baseline Distribution")
     axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
 
     plt.tight_layout()
     angle_path = output_dir / "viewing_angle_analysis.png"
     plt.savefig(angle_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Saved: {angle_path}")
+
+
+# ============================================================================
+# Timing comparison
+# ============================================================================
+
+def compare_timings(base_dir, output="timing_comparison.png"):
+    """Load timings.json from each method directory and generate comparison plots."""
+    base_dir = Path(base_dir)
+    all_timings = {}
+
+    for method_dir in sorted(base_dir.iterdir()):
+        if not method_dir.is_dir():
+            continue
+        timings_file = method_dir / "timings.json"
+        if timings_file.exists():
+            label = method_dir.name.replace("_reconstruction", "")
+            with open(timings_file) as f:
+                all_timings[label] = json.load(f)
+
+    if not all_timings:
+        print("No timings.json files found. Run reconstructions first.")
+        return
+
+    labels = list(all_timings.keys())
+    n = len(labels)
+    print(f"\nFound timings for {n} methods: {labels}")
+
+    # Collect all stage names across methods
+    all_stages = set()
+    for t in all_timings.values():
+        all_stages.update(t.keys())
+    # Remove 'total' and 'total_pipeline' from stage breakdown
+    breakdown_stages = sorted(all_stages - {"total", "total_pipeline"})
+
+    colors_map = {
+        "feature_extraction": "#4C72B0",
+        "matching": "#DD8452",
+        "aggregation": "#55A868",
+        "geometric_verification": "#C44E52",
+        "sparse_reconstruction": "#8172B3",
+        "undistortion": "#937860",
+        "patch_match": "#DA8BC3",
+        "fusion": "#8C8C8C",
+        "feature_extraction_and_matching": "#CCB974",
+    }
+
+    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+    fig.suptitle("Pipeline Timing Comparison", fontsize=16, fontweight="bold")
+
+    # --- 1. Total time bar chart ---
+    ax = axes[0]
+    totals = []
+    for label in labels:
+        t = all_timings[label]
+        total = t.get("total", t.get("total_pipeline", sum(t.values())))
+        totals.append(total)
+
+    bar_colors = plt.cm.tab10(np.linspace(0, 1, max(n, 3)))
+    bars = ax.barh(labels, totals, color=bar_colors[:n])
+    ax.set_xlabel("Time (seconds)")
+    ax.set_title("Total Pipeline Time")
+    for bar, val in zip(bars, totals):
+        ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height() / 2,
+                f"{val:.0f}s", va="center", fontsize=9)
+
+    # --- 2. Stacked bar chart (stage breakdown) ---
+    ax = axes[1]
+    bottom = np.zeros(n)
+    for stage in breakdown_stages:
+        vals = [all_timings[l].get(stage, 0) for l in labels]
+        color = colors_map.get(stage, None)
+        ax.barh(labels, vals, left=bottom, label=stage.replace("_", " ").title(),
+                color=color)
+        bottom += np.array(vals)
+
+    ax.set_xlabel("Time (seconds)")
+    ax.set_title("Time Breakdown by Stage")
+    ax.legend(loc="lower right", fontsize=7)
+
+    # --- 3. Per-stage grouped bars ---
+    ax = axes[2]
+    # Show key stages only
+    key_stages = [s for s in ["feature_extraction", "matching",
+                               "sparse_reconstruction", "patch_match"]
+                  if s in all_stages]
+    if not key_stages:
+        key_stages = breakdown_stages[:4]
+
+    x = np.arange(len(key_stages))
+    width = 0.8 / n
+    for i, label in enumerate(labels):
+        vals = [all_timings[label].get(s, 0) for s in key_stages]
+        ax.bar(x + i * width, vals, width, label=label, color=bar_colors[i])
+
+    ax.set_xticks(x + width * (n - 1) / 2)
+    ax.set_xticklabels([s.replace("_", " ").title() for s in key_stages],
+                       rotation=30, ha="right")
+    ax.set_ylabel("Time (seconds)")
+    ax.set_title("Key Stages Comparison")
+    ax.legend(fontsize=7)
+
+    plt.tight_layout()
+    output_path = Path(output)
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved: {output_path}")
+
+    # Print table
+    print("\n" + "=" * 80)
+    header = f"{'Method':<25}"
+    for s in breakdown_stages:
+        header += f" {s[:12]:>12}"
+    header += f" {'TOTAL':>10}"
+    print(header)
+    print("=" * 80)
+    for label in labels:
+        row = f"{label:<25}"
+        for s in breakdown_stages:
+            val = all_timings[label].get(s, 0)
+            row += f" {val:>11.1f}s"
+        total = all_timings[label].get("total",
+                all_timings[label].get("total_pipeline",
+                sum(all_timings[label].values())))
+        row += f" {total:>9.1f}s"
+        print(row)
+    print("=" * 80)
 
 
 # ============================================================================
@@ -455,3 +599,8 @@ if __name__ == "__main__":
         print("No reconstruction directories found!")
     else:
         compare_reconstructions(existing_dirs, existing_labels, args.output)
+
+    # Timing comparison (uses timings.json from method dirs)
+    if args.base_dir:
+        compare_timings(args.base_dir,
+                        output=str(Path(args.output).with_name("timing_comparison.png")))

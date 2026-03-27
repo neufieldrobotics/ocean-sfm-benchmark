@@ -9,7 +9,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 COLMAP_BIN = "colmap"
 
 # SuperPoint + SuperGlue
-SP_MAX_DIM = 3200
+SP_MAX_DIM = 4000  # No downscaling — process at full resolution
 SP_MAX_KEYPOINTS = -1
 SP_KEYPOINT_THRESHOLD = 0.05
 SP_NMS_RADIUS = 3
@@ -24,7 +24,7 @@ ALIKED_DETECTION_THRESHOLD = 0.2
 ALIKED_NMS_RADIUS = 1
 
 # DISK
-DISK_MAX_KEYPOINTS = 4096
+DISK_MAX_KEYPOINTS = 10000
 
 # Dense matchers
 ROMA_MAX_KEYPOINTS_PER_PAIR = 2048

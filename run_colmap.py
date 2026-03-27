@@ -21,7 +21,7 @@ from extractors import get_extractor, AVAILABLE_METHODS
 from extractors.sift_native import NativeColmapExtractor
 from colmap_db import ColmapDatabase
 from colmap_pipeline import (
-    setup_output_dirs, discover_images,
+    setup_output_dirs, discover_images, save_timings,
     run_sparse_pipeline, run_dense_pipeline,
     run_colmap_mapper, run_colmap_mvs,
 )
@@ -38,42 +38,41 @@ def run_single_method(method, image_dir, output_dir, skip_dense=False,
     device = DEVICE
     extractor = get_extractor(method, device)
 
-    if isinstance(extractor, NativeColmapExtractor) and extractor.runs_full_pipeline:
-        # SIFT: automatic_reconstructor handles everything
-        output_dir = str(Path(output_dir).resolve())
-        if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
-        extractor.run(image_dir, output_dir, quality=quality,
-                      skip_dense=skip_dense)
-        print(f"\nDone: {method}")
-        print(f"Output: {output_dir}")
-        return
-
-    # All other methods: we handle DB + mapper + MVS
+    # All methods: separate commands with per-stage timing
     output_dir, db_path, sparse_path, dense_path = setup_output_dirs(output_dir)
     image_paths = discover_images(image_dir)
+    timings = {}
 
     if isinstance(extractor, NativeColmapExtractor):
-        # ALIKED: native extraction + matching, but we run mapper/MVS
+        # SIFT / ALIKED native: per-stage timing stored in extractor.timings
         extractor.run(image_dir, db_path)
+        timings.update(extractor.timings)
     elif extractor.is_dense:
         db = ColmapDatabase(db_path)
-        run_dense_pipeline(db, extractor, image_paths, device)
+        stage_timings = run_dense_pipeline(db, extractor, image_paths, device)
+        timings.update(stage_timings)
         db.close()
     else:
         db = ColmapDatabase(db_path)
-        run_sparse_pipeline(db, extractor, image_paths, device)
+        stage_timings = run_sparse_pipeline(db, extractor, image_paths, device)
+        timings.update(stage_timings)
         db.close()
 
     # Sparse reconstruction
-    sparse_model = run_colmap_mapper(db_path, image_dir, sparse_path)
+    sparse_model, mapper_time = run_colmap_mapper(db_path, image_dir, sparse_path)
+    timings["sparse_reconstruction"] = mapper_time
     if sparse_model is None:
         print(f"Mapper failed for {method}. Skipping dense reconstruction.")
+        save_timings(output_dir, timings)
         return
 
     # Dense reconstruction
     if not skip_dense:
-        run_colmap_mvs(image_dir, sparse_model, dense_path)
+        mvs_timings = run_colmap_mvs(image_dir, sparse_model, dense_path)
+        timings.update(mvs_timings)
+
+    timings["total"] = sum(timings.values())
+    save_timings(output_dir, timings)
 
     print(f"\nDone: {method}")
     print(f"Output: {output_dir}")

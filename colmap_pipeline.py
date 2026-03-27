@@ -1,12 +1,15 @@
 """Shared COLMAP pipeline stages for all feature extractors.
 
 Handles sparse extraction+matching, dense aggregation, and COLMAP execution
-(mapper, undistorter, PatchMatch, fusion).
+(mapper, undistorter, PatchMatch, fusion). All stages are timed and results
+saved to timings.json.
 """
 
 import os
+import json
 import subprocess
 import shutil
+import time
 import numpy as np
 import cv2
 import torch
@@ -53,23 +56,32 @@ def discover_images(image_dir):
     return image_paths
 
 
+def save_timings(output_dir, timings):
+    """Save pipeline timings to JSON."""
+    path = os.path.join(output_dir, "timings.json")
+    with open(path, "w") as f:
+        json.dump(timings, f, indent=2)
+    print(f"Timings saved to: {path}")
+
+
 def run_sparse_pipeline(db, extractor, image_paths, device):
     """Feature extraction + exhaustive matching for sparse extractors.
 
-    Creates per-image cameras, extracts features, runs exhaustive matching
-    with geometric verification, and stores everything in the COLMAP DB.
+    Returns dict of timings for each stage.
     """
+    timings = {}
     image_id_map = {}
     feat_cache = {}
 
+    # --- Feature Extraction ---
     print(f"\n=== 1) Feature Extraction ({extractor.name}) ===")
+    t0 = time.time()
     for img_path in tqdm(image_paths, desc="Extracting"):
         feat = extractor.extract_features_image(img_path)
         if feat is None:
             print(f"  Could not read {img_path.name}, skipping.")
             continue
 
-        # Per-image camera
         h, w = feat["orig_hw"]
         cam_id = db.add_camera(w, h)
         image_id = db.add_image(img_path.name, cam_id)
@@ -81,13 +93,17 @@ def run_sparse_pipeline(db, extractor, image_paths, device):
         feat_cache[img_path] = feat
 
     db.commit()
+    timings["feature_extraction"] = time.time() - t0
 
     image_list = list(image_id_map.keys())
     n_images = len(image_list)
     n_pairs = n_images * (n_images - 1) // 2
     print(f"Extracted features for {n_images} images. Matching {n_pairs} pairs.")
+    print(f"  Time: {timings['feature_extraction']:.1f}s")
 
+    # --- Matching + Geometric Verification ---
     print(f"\n=== 2) Exhaustive Matching ({extractor.name}) ===")
+    t0 = time.time()
     match_counter = 0
     pair_counter = 0
 
@@ -112,9 +128,6 @@ def run_sparse_pipeline(db, extractor, image_paths, device):
                 continue
 
             id1, id2 = image_id_map[img0], image_id_map[img1]
-            # matches table: ALL raw putative matches (before RANSAC)
-            # two_view_geometries: only RANSAC-verified inliers
-            # COLMAP mapper uses raw match counts for pair importance & track building
             db.add_matches(id1, id2, matches_arr)
             db.add_two_view_geometry(id1, id2, inlier_matches, F)
             match_counter += 1
@@ -127,20 +140,21 @@ def run_sparse_pipeline(db, extractor, image_paths, device):
                 torch.cuda.empty_cache()
 
     db.commit()
+    timings["matching"] = time.time() - t0
     print(f"Verified pairs: {match_counter} / {n_pairs}")
+    print(f"  Time: {timings['matching']:.1f}s")
 
     # Free GPU memory
     del feat_cache
     if device == "cuda":
         torch.cuda.empty_cache()
 
+    return timings
+
 
 def run_dense_pipeline(db, extractor, image_paths, device):
-    """Dense matching pipeline: match all pairs, aggregate keypoints, write to DB.
-
-    Uses KeypointAggregator to cluster per-pair correspondences into
-    canonical per-image keypoints.
-    """
+    """Dense matching pipeline. Returns dict of timings."""
+    timings = {}
     aggregator = KeypointAggregator()
 
     n_images = len(image_paths)
@@ -155,6 +169,7 @@ def run_dense_pipeline(db, extractor, image_paths, device):
 
     # Phase 2: Match all pairs
     print(f"\n=== 1) Dense Matching ({extractor.name}, {total_pairs} pairs) ===")
+    t0 = time.time()
     pair_count = 0
     for i in tqdm(range(n_images), desc="Matching"):
         if image_paths[i] not in feat_cache:
@@ -178,16 +193,21 @@ def run_dense_pipeline(db, extractor, image_paths, device):
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
 
+    timings["matching"] = time.time() - t0
+    print(f"  Time: {timings['matching']:.1f}s")
+
     # Phase 3: Aggregate keypoints
     print("\n=== 2) Keypoint Aggregation ===")
+    t0 = time.time()
     keypoints_per_image, kd_trees = aggregator.aggregate()
-
     for img_name, kps in keypoints_per_image.items():
         print(f"  {img_name}: {len(kps)} canonical keypoints")
 
     # Phase 4: Re-index matches
     print("\n=== 3) Re-indexing Matches ===")
     reindexed_pairs = aggregator.reindex_matches(kd_trees)
+    timings["aggregation"] = time.time() - t0
+    print(f"  Time: {timings['aggregation']:.1f}s")
 
     # Phase 5: Write to DB
     print("\n=== 4) Writing COLMAP Database ===")
@@ -204,7 +224,6 @@ def run_dense_pipeline(db, extractor, image_paths, device):
                                       np.zeros((0, 2), dtype=np.float32))
         db.add_keypoints(image_id, kps)
 
-        # Dummy descriptors (COLMAP requires them but mapper uses matches directly)
         n_kps = len(kps)
         dummy_desc = np.zeros((n_kps, 128), dtype=np.float32) if n_kps > 0 \
             else np.zeros((0, 128), dtype=np.float32)
@@ -214,6 +233,7 @@ def run_dense_pipeline(db, extractor, image_paths, device):
 
     # Phase 6: Geometric verification + write matches
     print("\n=== 5) Geometric Verification ===")
+    t0 = time.time()
     verified_count = 0
     for img0_name, img1_name, matches, _ in tqdm(reindexed_pairs, desc="Verifying"):
         kps0 = keypoints_per_image.get(img0_name)
@@ -227,22 +247,25 @@ def run_dense_pipeline(db, extractor, image_paths, device):
 
         id0 = image_id_map[img0_name]
         id1 = image_id_map[img1_name]
-        # Raw matches in matches table, verified inliers in two_view_geometries
         db.add_matches(id0, id1, matches)
         db.add_two_view_geometry(id0, id1, inliers, F)
         verified_count += 1
 
     db.commit()
+    timings["geometric_verification"] = time.time() - t0
     print(f"Verified pairs: {verified_count} / {len(reindexed_pairs)}")
+    print(f"  Time: {timings['geometric_verification']:.1f}s")
 
     # Free GPU memory
     del feat_cache
     if device == "cuda":
         torch.cuda.empty_cache()
 
+    return timings
+
 
 def run_colmap_mapper(db_path, image_dir, sparse_path, mapper_flags=None):
-    """Run COLMAP mapper for sparse reconstruction."""
+    """Run COLMAP mapper. Returns (sparse_model_path, elapsed_seconds)."""
     flags = dict(MAPPER_FLAGS)
     if mapper_flags:
         flags.update(mapper_flags)
@@ -257,16 +280,33 @@ def run_colmap_mapper(db_path, image_dir, sparse_path, mapper_flags=None):
         cmd.extend([f"--Mapper.{key}", str(val)])
 
     print("\n=== Sparse Reconstruction (mapper) ===")
+    t0 = time.time()
     subprocess.run(cmd, check=True)
+    elapsed = time.time() - t0
+    print(f"  Time: {elapsed:.1f}s")
 
-    # Find the sparse model directory
+    # Find the largest sparse model (most images registered)
     sparse_model_dirs = sorted([
         d for d in Path(sparse_path).iterdir() if d.is_dir()
     ])
     if not sparse_model_dirs:
         print("ERROR: Mapper produced no models.")
-        return None
-    sparse_model = str(sparse_model_dirs[0])
+        return None, elapsed
+
+    if len(sparse_model_dirs) == 1:
+        sparse_model = str(sparse_model_dirs[0])
+    else:
+        best_dir, best_count = sparse_model_dirs[0], 0
+        for d in sparse_model_dirs:
+            images_file = d / "images.bin"
+            if not images_file.exists():
+                images_file = d / "images.txt"
+            count = images_file.stat().st_size if images_file.exists() else 0
+            if count > best_count:
+                best_dir, best_count = d, count
+        sparse_model = str(best_dir)
+        print(f"Mapper produced {len(sparse_model_dirs)} sub-models, "
+              f"selecting largest.")
     print(f"Using sparse model: {sparse_model}")
 
     # Print stats
@@ -279,12 +319,15 @@ def run_colmap_mapper(db_path, image_dir, sparse_path, mapper_flags=None):
     except Exception:
         pass
 
-    return sparse_model
+    return sparse_model, elapsed
 
 
 def run_colmap_mvs(image_dir, sparse_model, dense_path):
-    """Run dense reconstruction: undistortion + PatchMatch + fusion."""
+    """Run dense reconstruction. Returns dict of timings per MVS stage."""
+    timings = {}
+
     print("\n=== Image Undistortion ===")
+    t0 = time.time()
     subprocess.run([
         COLMAP_BIN, "image_undistorter",
         "--image_path", image_dir,
@@ -292,15 +335,22 @@ def run_colmap_mvs(image_dir, sparse_model, dense_path):
         "--output_path", dense_path,
         "--output_type", "COLMAP",
     ], check=True)
+    timings["undistortion"] = time.time() - t0
+    print(f"  Time: {timings['undistortion']:.1f}s")
 
-    print("\n=== Dense Reconstruction (PatchMatch) ===")
+    print("\n=== PatchMatch Stereo ===")
+    t0 = time.time()
     subprocess.run([
         COLMAP_BIN, "patch_match_stereo",
         "--workspace_path", dense_path,
         "--workspace_format", "COLMAP",
         "--PatchMatchStereo.geom_consistency", "true",
     ], check=True)
+    timings["patch_match"] = time.time() - t0
+    print(f"  Time: {timings['patch_match']:.1f}s")
 
+    print("\n=== Stereo Fusion ===")
+    t0 = time.time()
     subprocess.run([
         COLMAP_BIN, "stereo_fusion",
         "--workspace_path", dense_path,
@@ -308,5 +358,8 @@ def run_colmap_mvs(image_dir, sparse_model, dense_path):
         "--input_type", "geometric",
         "--output_path", os.path.join(dense_path, "fused.ply"),
     ], check=True)
+    timings["fusion"] = time.time() - t0
+    print(f"  Time: {timings['fusion']:.1f}s")
 
     print(f"Dense reconstruction complete: {os.path.join(dense_path, 'fused.ply')}")
+    return timings

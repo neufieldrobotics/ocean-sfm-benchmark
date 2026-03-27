@@ -50,7 +50,7 @@ class SuperPointSuperGlueExtractor(BaseExtractor):
     @staticmethod
     def _resize_keep_aspect(img, max_dim):
         h, w = img.shape
-        if max(h, w) <= max_dim:
+        if max_dim <= 0 or max(h, w) <= max_dim:
             return img, 1.0, 1.0
         scale = max_dim / max(h, w)
         new_w, new_h = int(round(w * scale)), int(round(h * scale))
