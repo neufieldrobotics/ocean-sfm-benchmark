@@ -167,8 +167,11 @@ def run_dense_pipeline(db, extractor, image_paths, device):
         if feat is not None:
             feat_cache[img_path] = feat
 
-    # Phase 2: Match all pairs
+    # Phase 2: Match all pairs (with periodic model reload for VRAM-hungry models)
+    reload_every = getattr(extractor, 'reload_every', 0)
     print(f"\n=== 1) Dense Matching ({extractor.name}, {total_pairs} pairs) ===")
+    if reload_every > 0:
+        print(f"    Model reload every {reload_every} pairs to manage VRAM")
     t0 = time.time()
     pair_count = 0
     for i in tqdm(range(n_images), desc="Matching"):
@@ -189,9 +192,14 @@ def run_dense_pipeline(db, extractor, image_paths, device):
                     pts0, pts1, confs,
                 )
 
-            if device == "cuda" and pair_count % EMPTY_CACHE_EVERY == 0:
+            # Free GPU cache frequently for dense matchers
+            if device == "cuda" and pair_count % 5 == 0:
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
+
+            # Reload model periodically to reclaim leaked VRAM
+            if reload_every > 0 and pair_count % reload_every == 0:
+                extractor.reload_model()
 
     timings["matching"] = time.time() - t0
     print(f"  Time: {timings['matching']:.1f}s")

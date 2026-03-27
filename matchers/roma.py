@@ -18,8 +18,8 @@ class RoMaMatcher(BaseMatcher):
 
     def _init_matcher(self):
         try:
-            from romatch import roma_outdoor
-            self.roma = roma_outdoor(device=device)
+            from romatch import tiny_roma_v1_outdoor
+            self.roma = tiny_roma_v1_outdoor(device=device)
         except Exception as e:
             print(f"RoMa init failed: {e}")
 

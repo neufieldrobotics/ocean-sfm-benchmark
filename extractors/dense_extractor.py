@@ -21,12 +21,39 @@ class DenseExtractor(BaseExtractor):
     """Unified extractor for LoFTR, RoMa, and DKM dense matchers."""
     is_dense = True
 
+    # How many pairs to process before reloading the model to free leaked VRAM
+    RELOAD_EVERY = {
+        "loftr": 0,   # no reload needed
+        "roma": 0,    # tiny fits fine
+        "dkm": 50,
+    }
+
     def __init__(self, method="loftr", device="cuda"):
         super().__init__(device)
-        assert method in ("loftr", "roma", "dkm"), f"Unsupported method: {method}"
+        assert method in ("loftr", "roma", "dkm"), \
+            f"Unsupported method: {method}. " \
+            f"(roma-full removed — needs 24GB+ VRAM. Use 'roma' for tiny variant.)"
         self.method = method
         self.name = method
         self.model = None
+        self.reload_every = self.RELOAD_EVERY.get(method, 0)
+        self._setup_model()
+
+    def unload_model(self):
+        """Delete model and free all GPU memory."""
+        if self.model is not None:
+            del self.model
+            self.model = None
+        import gc
+        gc.collect()
+        if self.device == "cuda":
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+
+    def reload_model(self):
+        """Unload then reload the model to reclaim leaked VRAM."""
+        print(f"    Reloading {self.name} model to free VRAM...")
+        self.unload_model()
         self._setup_model()
 
     def _setup_model(self):
@@ -36,9 +63,9 @@ class DenseExtractor(BaseExtractor):
             print(f"LoFTR loaded on {self.device}")
 
         elif self.method == "roma":
-            from romatch import roma_outdoor
-            self.model = roma_outdoor(device=self.device)
-            print(f"RoMa loaded on {self.device}")
+            from romatch import tiny_roma_v1_outdoor
+            self.model = tiny_roma_v1_outdoor(device=self.device)
+            print(f"RoMa (tiny) loaded on {self.device}")
 
         elif self.method == "dkm":
             loaded = False
@@ -84,7 +111,7 @@ class DenseExtractor(BaseExtractor):
 
         if self.method == "loftr":
             return self._match_loftr(path0, path1)
-        elif self.method == "roma":
+        elif self.method in ("roma", "roma-full"):
             return self._match_roma(path0, path1, w0, h0, w1, h1)
         elif self.method == "dkm":
             return self._match_dkm(path0, path1, w0, h0, w1, h1)
@@ -137,28 +164,64 @@ class DenseExtractor(BaseExtractor):
 
         return mkpts0.astype(np.float32), mkpts1.astype(np.float32), conf
 
+    @staticmethod
+    def _load_roma_image_pil(path, max_dim=560):
+        """Load and resize image as PIL. Dims rounded to multiples of 14."""
+        from PIL import Image
+        img = Image.open(str(path)).convert("RGB")
+        w, h = img.size
+        if max(w, h) > max_dim:
+            scale = max_dim / max(w, h)
+            w, h = int(w * scale), int(h * scale)
+        w = (w // 14) * 14
+        h = (h // 14) * 14
+        return img.resize((w, h), Image.LANCZOS)
+
+    @staticmethod
+    def _load_roma_image_tensor(path, max_dim=560):
+        """Load and resize image as tensor [1,3,H,W] in [0,1]."""
+        import torchvision.transforms.functional as TF
+        img = DenseExtractor._load_roma_image_pil(path, max_dim)
+        return TF.to_tensor(img).unsqueeze(0)
+
     def _match_roma(self, path0, path1, w0, h0, w1, h1):
+        # Pre-resize to avoid OOM on large images (correlation volume is H*W * H*W)
+        roma_max_dim = 560
+
         with torch.no_grad():
-            warp, certainty = self.model.match(str(path0), str(path1),
-                                               device=self.device)
+            im0 = self._load_roma_image_tensor(path0, roma_max_dim).to(self.device)
+            im1 = self._load_roma_image_tensor(path1, roma_max_dim).to(self.device)
+            warp, certainty = self.model.match(im0, im1, batched=False)
+            del im0, im1
 
-        warp_flat = warp.reshape(-1, 4)
-        cert_flat = certainty.reshape(-1)
+            warp_flat = warp.reshape(-1, 4)
+            cert_flat = certainty.reshape(-1)
 
-        mask = cert_flat > ROMA_CONFIDENCE_THRESHOLD
-        warp_good = warp_flat[mask]
-        cert_good = cert_flat[mask]
+            mask = cert_flat > ROMA_CONFIDENCE_THRESHOLD
+            warp_good = warp_flat[mask]
+            cert_good = cert_flat[mask]
 
-        if len(warp_good) == 0:
-            return None, None, None
+            # Free the large dense tensors immediately
+            del warp, certainty, warp_flat, cert_flat, mask
 
-        if len(warp_good) > ROMA_MAX_KEYPOINTS_PER_PAIR:
-            topk_idx = torch.topk(cert_good, ROMA_MAX_KEYPOINTS_PER_PAIR).indices
-            warp_good = warp_good[topk_idx]
-            cert_good = cert_good[topk_idx]
+            if len(warp_good) == 0:
+                del warp_good, cert_good
+                torch.cuda.empty_cache()
+                return None, None, None
 
-        warp_np = warp_good.cpu().numpy()
-        cert_np = cert_good.cpu().numpy()
+            if len(warp_good) > ROMA_MAX_KEYPOINTS_PER_PAIR:
+                topk_idx = torch.topk(cert_good, ROMA_MAX_KEYPOINTS_PER_PAIR).indices
+                warp_good = warp_good[topk_idx]
+                cert_good = cert_good[topk_idx]
+
+            warp_np = warp_good.cpu().numpy()
+            cert_np = cert_good.cpu().numpy()
+            del warp_good, cert_good
+
+        # Free GPU memory after each pair — RoMa is very VRAM hungry
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
 
         pts0 = np.stack([
             (warp_np[:, 0] + 1) / 2 * w0,
