@@ -1,0 +1,25 @@
+name: afr
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - scipy
+  - matplotlib
+  - pandas
+  - seaborn
+  - tqdm
+  - pillow
+  - pip
+  - pip:
+      - --index-url https://download.pytorch.org/whl/cu130
+      - torch
+      - torchvision
+      - opencv-python
+      - lightglue
+      - kornia
+      - romatch
+      - dkm
