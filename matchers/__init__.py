@@ -21,6 +21,7 @@ AVAILABLE_MATCHERS = {
     "disk": lambda: DISKBFMatcher(),
     "disk+lg": lambda: LightGlueMatcher("disk"),
     "roma": lambda: RoMaMatcher(),
+    "roma-full": lambda: RoMaMatcher(variant="full"),
     "dkm": lambda: DKMMatcher(),
 }
 

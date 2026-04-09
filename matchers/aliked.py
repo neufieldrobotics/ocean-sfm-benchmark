@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from matchers.base import BaseMatcher
 from matchers.sift import load_image
+from config import MAX_IMAGE_DIM, ALIKED_MAX_KEYPOINTS, ALIKED_DETECTION_THRESHOLD, ALIKED_NMS_RADIUS
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -14,8 +15,9 @@ class ALIKEDMatcher(BaseMatcher):
     """ALIKED with BF descriptor matching (ratio test)."""
     name = "ALIKED"
 
-    def __init__(self, max_keypoints=4096, detection_threshold=0.2,
-                 ratio_thresh=0.8, model_name="aliked-n16"):
+    def __init__(self, max_keypoints=ALIKED_MAX_KEYPOINTS,
+                 detection_threshold=ALIKED_DETECTION_THRESHOLD,
+                 ratio_thresh=0.8, model_name="aliked-n16rot"):
         self.max_keypoints = max_keypoints
         self.detection_threshold = detection_threshold
         self.ratio_thresh = ratio_thresh
@@ -28,10 +30,10 @@ class ALIKEDMatcher(BaseMatcher):
         # Try lightglue's ALIKED first (most reliable)
         try:
             from lightglue import ALIKED
-            self.aliked = ALIKED(
-                max_num_keypoints=self.max_keypoints,
-                detection_threshold=self.detection_threshold,
-            ).eval().to(device)
+            kwargs = {"detection_threshold": self.detection_threshold}
+            if self.max_keypoints > 0:
+                kwargs["max_num_keypoints"] = self.max_keypoints
+            self.aliked = ALIKED(**kwargs).eval().to(device)
             self.backend = "lightglue"
             return
         except (ImportError, Exception):
@@ -40,11 +42,13 @@ class ALIKEDMatcher(BaseMatcher):
         # Try kornia
         try:
             from kornia.feature import ALIKED as ALIKED_Kornia
-            self.aliked = ALIKED_Kornia(
-                max_num_keypoints=self.max_keypoints,
-                detection_threshold=self.detection_threshold,
-                model_name=self.model_name,
-            ).eval().to(device)
+            kornia_kwargs = {
+                "detection_threshold": self.detection_threshold,
+                "model_name": self.model_name,
+            }
+            if self.max_keypoints > 0:
+                kornia_kwargs["max_num_keypoints"] = self.max_keypoints
+            self.aliked = ALIKED_Kornia(**kornia_kwargs).eval().to(device)
             self.backend = "kornia"
             return
         except (ImportError, Exception):
@@ -54,12 +58,14 @@ class ALIKEDMatcher(BaseMatcher):
         try:
             sys.path.append("./ALIKED")
             from nets.aliked import ALIKED as ALIKED_Standalone
-            self.aliked = ALIKED_Standalone(
-                model_name=self.model_name,
-                top_k=self.max_keypoints,
-                scores_th=self.detection_threshold,
-                n_limit=self.max_keypoints,
-            ).eval().to(device)
+            standalone_kwargs = {
+                "model_name": self.model_name,
+                "scores_th": self.detection_threshold,
+            }
+            if self.max_keypoints > 0:
+                standalone_kwargs["top_k"] = self.max_keypoints
+                standalone_kwargs["n_limit"] = self.max_keypoints
+            self.aliked = ALIKED_Standalone(**standalone_kwargs).eval().to(device)
             self.backend = "standalone"
         except Exception as e:
             print(f"ALIKED init failed: {e}")
@@ -82,9 +88,8 @@ class ALIKEDMatcher(BaseMatcher):
         def _load(path):
             img = Image.open(str(path)).convert("RGB")
             w, h = img.size
-            max_dim = 1024
-            if max(w, h) > max_dim:
-                scale = max_dim / max(w, h)
+            if max(w, h) > MAX_IMAGE_DIM:
+                scale = MAX_IMAGE_DIM / max(w, h)
                 img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
             return TF.to_tensor(img).unsqueeze(0).to(device)
 
@@ -123,12 +128,11 @@ class ALIKEDMatcher(BaseMatcher):
         img0 = cv2.imread(str(path0))
         img1 = cv2.imread(str(path1))
 
-        max_size = 1024
-        if max(img0.shape[:2]) > max_size:
-            scale = max_size / max(img0.shape[:2])
+        if max(img0.shape[:2]) > MAX_IMAGE_DIM:
+            scale = MAX_IMAGE_DIM / max(img0.shape[:2])
             img0 = cv2.resize(img0, None, fx=scale, fy=scale)
-        if max(img1.shape[:2]) > max_size:
-            scale = max_size / max(img1.shape[:2])
+        if max(img1.shape[:2]) > MAX_IMAGE_DIM:
+            scale = MAX_IMAGE_DIM / max(img1.shape[:2])
             img1 = cv2.resize(img1, None, fx=scale, fy=scale)
 
         img0_rgb = cv2.cvtColor(img0, cv2.COLOR_BGR2RGB)

@@ -12,16 +12,9 @@ from pathlib import Path
 
 from extractors.base import BaseExtractor
 from config import (
-    SP_MAX_DIM, SP_MAX_KEYPOINTS, ALIKED_MAX_DIM, ALIKED_MAX_KEYPOINTS,
+    MAX_IMAGE_DIM, SP_MAX_KEYPOINTS, ALIKED_MAX_KEYPOINTS,
     ALIKED_DETECTION_THRESHOLD, ALIKED_NMS_RADIUS, DISK_MAX_KEYPOINTS,
 )
-
-# Max dimensions per feature type
-_MAX_DIMS = {
-    "superpoint": SP_MAX_DIM,
-    "aliked": ALIKED_MAX_DIM,
-    "disk": 1600,
-}
 
 
 class LightGlueExtractor(BaseExtractor):
@@ -40,24 +33,20 @@ class LightGlueExtractor(BaseExtractor):
 
         if self.feature_type == "superpoint":
             from lightglue import SuperPoint
-            kwargs = {}
-            if SP_MAX_KEYPOINTS > 0:
-                kwargs["max_num_keypoints"] = SP_MAX_KEYPOINTS
-            self.extractor = SuperPoint(**kwargs).eval().to(self.device)
+            self.extractor = SuperPoint(
+                max_num_keypoints=SP_MAX_KEYPOINTS if SP_MAX_KEYPOINTS > 0 else -1,
+            ).eval().to(self.device)
         elif self.feature_type == "aliked":
             from lightglue import ALIKED
-            kwargs = {
-                "detection_threshold": ALIKED_DETECTION_THRESHOLD,
-                "resize": ALIKED_MAX_DIM,
-                "nms_radius": ALIKED_NMS_RADIUS,
-            }
-            if ALIKED_MAX_KEYPOINTS > 0:
-                kwargs["max_num_keypoints"] = ALIKED_MAX_KEYPOINTS
-            self.extractor = ALIKED(**kwargs).eval().to(self.device)
+            self.extractor = ALIKED(
+                max_num_keypoints=ALIKED_MAX_KEYPOINTS if ALIKED_MAX_KEYPOINTS > 0 else -1,
+                detection_threshold=ALIKED_DETECTION_THRESHOLD,
+                nms_radius=ALIKED_NMS_RADIUS,
+            ).eval().to(self.device)
         elif self.feature_type == "disk":
             from lightglue import DISK
             self.extractor = DISK(
-                max_num_keypoints=DISK_MAX_KEYPOINTS,
+                max_num_keypoints=DISK_MAX_KEYPOINTS if DISK_MAX_KEYPOINTS > 0 else -1,
             ).eval().to(self.device)
 
         self.matcher = LightGlue(
@@ -70,13 +59,17 @@ class LightGlueExtractor(BaseExtractor):
 
     @staticmethod
     def _read_image_tensor(path, device):
-        """Read image as [1, 3, H, W] tensor in [0, 1] range."""
+        """Read image as [1, 3, H, W] tensor in [0, 1] range, resized to MAX_IMAGE_DIM."""
         import torchvision.transforms.functional as TF
         from PIL import Image
 
         img = Image.open(str(path)).convert("RGB")
+        w, h = img.size
+        if max(w, h) > MAX_IMAGE_DIM:
+            scale = MAX_IMAGE_DIM / max(w, h)
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
         tensor = TF.to_tensor(img).unsqueeze(0).to(device)
-        return tensor, img.size  # (W, H)
+        return tensor, img.size  # (W, H) after resize
 
     def extract_features_image(self, image_path):
         img_tensor, (w_orig, h_orig) = self._read_image_tensor(image_path, self.device)

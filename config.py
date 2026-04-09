@@ -8,30 +8,36 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # COLMAP binary
 COLMAP_BIN = "colmap"
 
+# Uniform image resolution for all detectors
+MAX_IMAGE_DIM = 1600
+
+# Uniform match cap — top matches per pair by confidence (for fair comparison)
+MAX_MATCHES_PER_PAIR = 8000
+
 # SuperPoint + SuperGlue
-SP_MAX_DIM = 4000  # No downscaling — process at full resolution
+SP_MAX_DIM = MAX_IMAGE_DIM
 SP_MAX_KEYPOINTS = -1
-SP_KEYPOINT_THRESHOLD = 0.05
-SP_NMS_RADIUS = 3
-SG_MATCH_THRESHOLD = 0.3
+SP_KEYPOINT_THRESHOLD = 0.005
+SP_NMS_RADIUS = 2
+SG_MATCH_THRESHOLD = 0.2
 SG_WEIGHTS = "outdoor"
 SUPERGLUE_REPO = "https://github.com/magicleap/SuperGluePretrainedNetwork.git"
 
 # ALIKED
-ALIKED_MAX_DIM = 3200
+ALIKED_MAX_DIM = MAX_IMAGE_DIM
 ALIKED_MAX_KEYPOINTS = -1
-ALIKED_DETECTION_THRESHOLD = 0.2
+ALIKED_DETECTION_THRESHOLD = 0.01
 ALIKED_NMS_RADIUS = 1
 
 # DISK
-DISK_MAX_KEYPOINTS = 10000
+DISK_MAX_KEYPOINTS = MAX_MATCHES_PER_PAIR  # DISK/kornia doesn't support -1 (unlimited)
 
 # Dense matchers
-ROMA_MAX_KEYPOINTS_PER_PAIR = 2048
+ROMA_MAX_KEYPOINTS_PER_PAIR = MAX_MATCHES_PER_PAIR
 ROMA_CONFIDENCE_THRESHOLD = 0.1
-LOFTR_MAX_DIM = 840
-LOFTR_CONFIDENCE_THRESHOLD = 0.3
-DKM_MAX_KEYPOINTS_PER_PAIR = 2048
+LOFTR_MAX_DIM = MAX_IMAGE_DIM
+LOFTR_CONFIDENCE_THRESHOLD = 0.1
+DKM_MAX_KEYPOINTS_PER_PAIR = MAX_MATCHES_PER_PAIR
 
 # Keypoint aggregation (dense matchers)
 KEYPOINT_MERGE_RADIUS = 3.0

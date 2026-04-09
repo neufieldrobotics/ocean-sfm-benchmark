@@ -28,6 +28,7 @@ def get_extractor(method, device="cuda"):
         "disk+lightglue": lambda: LightGlueExtractor("disk", device),
         "loftr": lambda: DenseExtractor("loftr", device),
         "roma": lambda: DenseExtractor("roma", device),
+        "roma-full": lambda: DenseExtractor("roma-full", device),
         "dkm": lambda: DenseExtractor("dkm", device),
     }
 
@@ -47,5 +48,6 @@ AVAILABLE_METHODS = [
     "disk+lightglue",
     "loftr",
     "roma",
+    "roma-full",
     "dkm",
 ]

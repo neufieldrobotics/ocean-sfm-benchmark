@@ -6,6 +6,10 @@ import torch
 from typing import Tuple
 from matchers.base import BaseMatcher
 from matchers.sift import load_image
+from config import (
+    SP_MAX_KEYPOINTS, SP_KEYPOINT_THRESHOLD, SP_NMS_RADIUS,
+    SG_MATCH_THRESHOLD, SG_WEIGHTS,
+)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -23,14 +27,14 @@ class SuperGlueMatcher(BaseMatcher):
             from models.matching import Matching
             config = {
                 "superpoint": {
-                    "nms_radius": 4,
-                    "keypoint_threshold": 0.005,
-                    "max_keypoints": 2048,
+                    "nms_radius": SP_NMS_RADIUS,
+                    "keypoint_threshold": SP_KEYPOINT_THRESHOLD,
+                    "max_keypoints": SP_MAX_KEYPOINTS,
                 },
                 "superglue": {
-                    "weights": "outdoor",
+                    "weights": SG_WEIGHTS,
                     "sinkhorn_iterations": 20,
-                    "match_threshold": 0.2,
+                    "match_threshold": SG_MATCH_THRESHOLD,
                 },
             }
             self.matching = Matching(config).eval().to(device)

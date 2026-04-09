@@ -64,7 +64,7 @@ class SuperPointSuperGlueExtractor(BaseExtractor):
 
         h_orig, w_orig = img.shape
         img_rs, scale_x, scale_y = self._resize_keep_aspect(img, SP_MAX_DIM)
-
+        print(f"Extracting SuperPoint features from {image_path} (original: {w_orig}x{h_orig}, resized: {img_rs.shape[1]}x{img_rs.shape[0]})")
         img_tensor = torch.from_numpy(img_rs / 255.0).float()[None, None].to(self.device)
 
         with torch.no_grad():

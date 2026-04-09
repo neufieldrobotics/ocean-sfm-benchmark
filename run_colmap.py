@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import os
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 """Single entry point for COLMAP reconstruction with any feature method.
 
 Usage:
@@ -21,7 +24,7 @@ from extractors import get_extractor, AVAILABLE_METHODS
 from extractors.sift_native import NativeColmapExtractor
 from colmap_db import ColmapDatabase
 from colmap_pipeline import (
-    setup_output_dirs, discover_images, save_timings,
+    setup_output_dirs, discover_images, save_timings, save_keypoint_stats,
     run_sparse_pipeline, run_dense_pipeline,
     run_colmap_mapper, run_colmap_mvs,
 )
@@ -43,18 +46,27 @@ def run_single_method(method, image_dir, output_dir, skip_dense=False,
     image_paths = discover_images(image_dir)
     timings = {}
 
+    keypoint_counts = {}
+
     if isinstance(extractor, NativeColmapExtractor):
         # SIFT / ALIKED native: per-stage timing stored in extractor.timings
         extractor.run(image_dir, db_path)
         timings.update(extractor.timings)
+        # Read keypoint counts from database
+        db = ColmapDatabase(db_path)
+        for row in db.connection.execute(
+                "SELECT i.name, k.rows FROM images i "
+                "JOIN keypoints k ON i.image_id = k.image_id"):
+            keypoint_counts[row[0]] = row[1]
+        db.close()
     elif extractor.is_dense:
         db = ColmapDatabase(db_path)
-        stage_timings = run_dense_pipeline(db, extractor, image_paths, device)
+        stage_timings, keypoint_counts = run_dense_pipeline(db, extractor, image_paths, device)
         timings.update(stage_timings)
         db.close()
     else:
         db = ColmapDatabase(db_path)
-        stage_timings = run_sparse_pipeline(db, extractor, image_paths, device)
+        stage_timings, keypoint_counts = run_sparse_pipeline(db, extractor, image_paths, device)
         timings.update(stage_timings)
         db.close()
 
@@ -73,6 +85,7 @@ def run_single_method(method, image_dir, output_dir, skip_dense=False,
 
     timings["total"] = sum(timings.values())
     save_timings(output_dir, timings)
+    save_keypoint_stats(output_dir, keypoint_counts)
 
     print(f"\nDone: {method}")
     print(f"Output: {output_dir}")

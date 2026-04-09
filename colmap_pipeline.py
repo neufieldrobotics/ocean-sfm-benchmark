@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from config import (
     COLMAP_BIN, MIN_INLIERS, EMPTY_CACHE_EVERY,
-    MAPPER_FLAGS, IMAGE_EXTENSIONS,
+    MAPPER_FLAGS, IMAGE_EXTENSIONS, MAX_MATCHES_PER_PAIR,
 )
 from colmap_db import ColmapDatabase, verify_matches_cv2
 from keypoint_aggregator import KeypointAggregator
@@ -64,6 +64,21 @@ def save_timings(output_dir, timings):
     print(f"Timings saved to: {path}")
 
 
+def save_keypoint_stats(output_dir, per_image_counts):
+    """Save per-image keypoint counts to JSON."""
+    stats = {
+        "per_image": per_image_counts,
+        "mean": float(np.mean(list(per_image_counts.values()))) if per_image_counts else 0,
+        "median": float(np.median(list(per_image_counts.values()))) if per_image_counts else 0,
+        "total": int(sum(per_image_counts.values())),
+        "num_images": len(per_image_counts),
+    }
+    path = os.path.join(output_dir, "keypoint_stats.json")
+    with open(path, "w") as f:
+        json.dump(stats, f, indent=2)
+    print(f"Keypoint stats saved to: {path} (mean: {stats['mean']:.0f} per image)")
+
+
 def run_sparse_pipeline(db, extractor, image_paths, device):
     """Feature extraction + exhaustive matching for sparse extractors.
 
@@ -72,6 +87,7 @@ def run_sparse_pipeline(db, extractor, image_paths, device):
     timings = {}
     image_id_map = {}
     feat_cache = {}
+    keypoint_counts = {}
 
     # --- Feature Extraction ---
     print(f"\n=== 1) Feature Extraction ({extractor.name}) ===")
@@ -91,6 +107,7 @@ def run_sparse_pipeline(db, extractor, image_paths, device):
 
         image_id_map[img_path] = image_id
         feat_cache[img_path] = feat
+        keypoint_counts[img_path.name] = len(feat["kps_orig"])
 
     db.commit()
     timings["feature_extraction"] = time.time() - t0
@@ -123,6 +140,14 @@ def run_sparse_pipeline(db, extractor, image_paths, device):
             if matches_arr is None or len(matches_arr) < MIN_INLIERS:
                 continue
 
+            # Cap matches per pair — keep top by confidence
+            if len(matches_arr) > MAX_MATCHES_PER_PAIR and _conf is not None:
+                top_idx = np.argsort(_conf)[::-1][:MAX_MATCHES_PER_PAIR]
+                matches_arr = matches_arr[top_idx]
+                _conf = _conf[top_idx]
+            elif len(matches_arr) > MAX_MATCHES_PER_PAIR:
+                matches_arr = matches_arr[:MAX_MATCHES_PER_PAIR]
+
             inlier_matches, F = verify_matches_cv2(kp0_orig, kp1_orig, matches_arr)
             if inlier_matches is None:
                 continue
@@ -149,7 +174,7 @@ def run_sparse_pipeline(db, extractor, image_paths, device):
     if device == "cuda":
         torch.cuda.empty_cache()
 
-    return timings
+    return timings, keypoint_counts
 
 
 def run_dense_pipeline(db, extractor, image_paths, device):
@@ -187,6 +212,15 @@ def run_dense_pipeline(db, extractor, image_paths, device):
 
             if result[0] is not None and len(result[0]) >= MIN_INLIERS:
                 pts0, pts1, confs = result
+
+                # Cap matches per pair — keep top by confidence
+                if len(pts0) > MAX_MATCHES_PER_PAIR and confs is not None:
+                    top_idx = np.argsort(confs)[::-1][:MAX_MATCHES_PER_PAIR]
+                    pts0, pts1, confs = pts0[top_idx], pts1[top_idx], confs[top_idx]
+                elif len(pts0) > MAX_MATCHES_PER_PAIR:
+                    pts0 = pts0[:MAX_MATCHES_PER_PAIR]
+                    pts1 = pts1[:MAX_MATCHES_PER_PAIR]
+
                 aggregator.add_pair(
                     image_paths[i].name, image_paths[j].name,
                     pts0, pts1, confs,
@@ -264,12 +298,15 @@ def run_dense_pipeline(db, extractor, image_paths, device):
     print(f"Verified pairs: {verified_count} / {len(reindexed_pairs)}")
     print(f"  Time: {timings['geometric_verification']:.1f}s")
 
+    # Collect keypoint counts from aggregated keypoints
+    keypoint_counts = {name: len(kps) for name, kps in keypoints_per_image.items()}
+
     # Free GPU memory
     del feat_cache
     if device == "cuda":
         torch.cuda.empty_cache()
 
-    return timings
+    return timings, keypoint_counts
 
 
 def run_colmap_mapper(db_path, image_dir, sparse_path, mapper_flags=None):

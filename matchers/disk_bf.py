@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import torch
 from matchers.base import BaseMatcher
+from config import MAX_IMAGE_DIM, DISK_MAX_KEYPOINTS
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -12,7 +13,7 @@ class DISKBFMatcher(BaseMatcher):
     """DISK features with brute-force KNN matching + ratio test."""
     name = "DISK"
 
-    def __init__(self, max_keypoints=4096, ratio_thresh=0.8):
+    def __init__(self, max_keypoints=DISK_MAX_KEYPOINTS, ratio_thresh=0.8):
         self.max_keypoints = max_keypoints
         self.ratio_thresh = ratio_thresh
         self.extractor = None
@@ -21,9 +22,10 @@ class DISKBFMatcher(BaseMatcher):
     def _init_matcher(self):
         try:
             from lightglue import DISK
-            self.extractor = DISK(
-                max_num_keypoints=self.max_keypoints
-            ).eval().to(device)
+            kwargs = {}
+            if self.max_keypoints > 0:
+                kwargs["max_num_keypoints"] = self.max_keypoints
+            self.extractor = DISK(**kwargs).eval().to(device)
         except Exception as e:
             print(f"DISK init failed: {e}")
 
@@ -34,12 +36,9 @@ class DISKBFMatcher(BaseMatcher):
 
         img = Image.open(str(path)).convert("RGB")
         w, h = img.size
-        max_dim = 1024
-        if max(w, h) > max_dim:
-            scale = max_dim / max(w, h)
-            new_w, new_h = int(w * scale), int(h * scale)
-            img = img.resize((new_w, new_h), Image.LANCZOS)
-
+        if max(w, h) > MAX_IMAGE_DIM:
+            scale = MAX_IMAGE_DIM / max(w, h)
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
         tensor = TF.to_tensor(img).unsqueeze(0).to(device)
         return tensor
 

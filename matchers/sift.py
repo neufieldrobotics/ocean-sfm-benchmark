@@ -4,17 +4,18 @@ import cv2
 import numpy as np
 from typing import Tuple
 from matchers.base import BaseMatcher
+from config import MAX_IMAGE_DIM
 
 
-def load_image(path, resize=1024):
-    """Load image, resize if needed, return BGR, gray, scale."""
+def load_image(path):
+    """Load image, resize to MAX_IMAGE_DIM if needed, return BGR, gray, scale."""
     img = cv2.imread(str(path))
     if img is None:
         raise FileNotFoundError(f"Could not load image: {path}")
     h, w = img.shape[:2]
     scale = 1.0
-    if max(h, w) > resize:
-        scale = resize / max(h, w)
+    if max(h, w) > MAX_IMAGE_DIM:
+        scale = MAX_IMAGE_DIM / max(h, w)
         img = cv2.resize(img, None, fx=scale, fy=scale)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     return img, gray, scale
@@ -23,7 +24,7 @@ def load_image(path, resize=1024):
 class SIFTMatcher(BaseMatcher):
     name = "SIFT"
 
-    def __init__(self, nfeatures=8000, ratio_thresh=0.75):
+    def __init__(self, nfeatures=0, ratio_thresh=0.75):
         self.sift = cv2.SIFT_create(nfeatures=nfeatures)
         self.ratio_thresh = ratio_thresh
 

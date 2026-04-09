@@ -3,7 +3,9 @@
 import cv2
 import numpy as np
 import torch
+from PIL import Image
 from matchers.base import BaseMatcher
+from config import MAX_IMAGE_DIM
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -11,17 +13,24 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class RoMaMatcher(BaseMatcher):
     name = "RoMa"
 
-    def __init__(self, num_samples=5000):
+    def __init__(self, num_samples=5000, variant="tiny"):
         self.num_samples = num_samples
+        self.variant = variant
         self.roma = None
+        if variant == "full":
+            self.name = "RoMa-full"
         self._init_matcher()
 
     def _init_matcher(self):
         try:
-            from romatch import tiny_roma_v1_outdoor
-            self.roma = tiny_roma_v1_outdoor(device=device)
+            if self.variant == "full":
+                from romatch import roma_outdoor
+                self.roma = roma_outdoor(device=device)
+            else:
+                from romatch import tiny_roma_v1_outdoor
+                self.roma = tiny_roma_v1_outdoor(device=device)
         except Exception as e:
-            print(f"RoMa init failed: {e}")
+            print(f"RoMa ({self.variant}) init failed: {e}")
 
     def match(self, path0, path1):
         if self.roma is None:
@@ -33,7 +42,21 @@ class RoMaMatcher(BaseMatcher):
         H1, W1 = img1.shape[:2]
 
         with torch.no_grad():
-            warp, certainty = self.roma.match(path0, path1, device=device)
+            if self.variant == "full":
+                warp, certainty = self.roma.match(path0, path1, device=device)
+            else:
+                from torchvision.transforms import ToTensor
+                def _load_resized(path):
+                    img = Image.open(str(path)).convert("RGB")
+                    w, h = img.size
+                    if max(w, h) > MAX_IMAGE_DIM:
+                        scale = MAX_IMAGE_DIM / max(w, h)
+                        img = img.resize((int(w * scale), int(h * scale)),
+                                         Image.LANCZOS)
+                    return ToTensor()(img)[None].to(device)
+                im0 = _load_resized(path0)
+                im1 = _load_resized(path1)
+                warp, certainty = self.roma.match(im0, im1, batched=False)
             matches, _ = self.roma.sample(warp, certainty, num=self.num_samples)
 
             mkpts0 = matches[:, :2].cpu().numpy()

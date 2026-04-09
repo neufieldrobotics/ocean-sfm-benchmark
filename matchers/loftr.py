@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from matchers.base import BaseMatcher
 from matchers.sift import load_image
+from config import LOFTR_CONFIDENCE_THRESHOLD
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -11,7 +12,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class LoFTRMatcher(BaseMatcher):
     name = "LoFTR"
 
-    def __init__(self, confidence_thresh=0.5):
+    def __init__(self, confidence_thresh=LOFTR_CONFIDENCE_THRESHOLD):
         self.confidence_thresh = confidence_thresh
         self.loftr = None
         self._init_matcher()
@@ -27,8 +28,8 @@ class LoFTRMatcher(BaseMatcher):
         if self.loftr is None:
             return np.array([]), np.array([])
 
-        _, gray0, _ = load_image(path0, resize=840)
-        _, gray1, _ = load_image(path1, resize=840)
+        _, gray0, _ = load_image(path0)
+        _, gray1, _ = load_image(path1)
 
         # LoFTR requires dimensions divisible by 8
         h0, w0 = (gray0.shape[0] // 8) * 8, (gray0.shape[1] // 8) * 8

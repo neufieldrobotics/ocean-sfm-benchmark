@@ -524,6 +524,76 @@ def compare_timings(base_dir, output="timing_comparison.png"):
 
 
 # ============================================================================
+# Keypoint stats comparison
+# ============================================================================
+
+def compare_keypoint_stats(base_dir, output="keypoint_stats_comparison.png"):
+    """Load keypoint_stats.json from each method directory and plot."""
+    base_dir = Path(base_dir)
+    all_stats = {}
+
+    for method_dir in sorted(base_dir.iterdir()):
+        if not method_dir.is_dir():
+            continue
+        stats_file = method_dir / "keypoint_stats.json"
+        if stats_file.exists():
+            label = method_dir.name.replace("_reconstruction", "")
+            with open(stats_file) as f:
+                all_stats[label] = json.load(f)
+
+    if not all_stats:
+        print("No keypoint_stats.json files found. Run reconstructions first.")
+        return
+
+    labels = list(all_stats.keys())
+    n = len(labels)
+    colors = plt.cm.tab10(np.linspace(0, 1, max(n, 3)))
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle("Keypoint Detection Comparison", fontsize=16, fontweight="bold")
+
+    # 1. Mean keypoints per image (bar chart)
+    ax = axes[0]
+    means = [all_stats[l]["mean"] for l in labels]
+    bars = ax.bar(labels, means, color=colors[:n])
+    ax.set_title("Mean Keypoints per Image")
+    ax.set_ylabel("Count")
+    ax.tick_params(axis="x", rotation=30)
+    for bar, v in zip(bars, means):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+                f"{v:,.0f}", ha="center", va="bottom", fontsize=9)
+
+    # 2. Per-image keypoint distribution (box plot)
+    ax = axes[1]
+    data = []
+    for l in labels:
+        counts = list(all_stats[l]["per_image"].values())
+        data.append(counts)
+    bp = ax.boxplot(data, labels=labels, patch_artist=True, showfliers=False)
+    for patch, c in zip(bp["boxes"], colors[:n]):
+        patch.set_facecolor(c)
+    ax.set_title("Keypoints per Image Distribution")
+    ax.set_ylabel("Count")
+    ax.tick_params(axis="x", rotation=30)
+
+    plt.tight_layout()
+    output_path = Path(output)
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved: {output_path}")
+
+    # Print table
+    print("\n" + "=" * 70)
+    print(f"{'Method':<25} {'Mean':>10} {'Median':>10} {'Total':>12} {'Images':>8}")
+    print("=" * 70)
+    for l in labels:
+        s = all_stats[l]
+        print(f"{l:<25} {s['mean']:>10,.0f} {s['median']:>10,.0f} "
+              f"{s['total']:>12,} {s['num_images']:>8}")
+    print("=" * 70)
+
+
+# ============================================================================
 # Auto-discovery
 # ============================================================================
 
@@ -536,16 +606,28 @@ def discover_reconstructions(base_dir):
     for method_dir in sorted(base_dir.iterdir()):
         if not method_dir.is_dir():
             continue
-        # Look for sparse/0/ pattern
-        sparse_0 = method_dir / "sparse" / "0"
-        if sparse_0.exists() and (sparse_0 / "points3D.bin").exists():
-            recon_dirs.append(str(sparse_0))
-            labels.append(method_dir.name.replace("_reconstruction", ""))
-            continue
-        # Also check direct method_dir/0/ pattern
-        direct_0 = method_dir / "0"
-        if direct_0.exists() and (direct_0 / "points3D.bin").exists():
-            recon_dirs.append(str(direct_0))
+
+        # Look for sparse/<N>/ pattern — pick the latest (highest-numbered) model
+        sparse_dir = method_dir / "sparse"
+        if sparse_dir.exists():
+            model_dirs = sorted(
+                [d for d in sparse_dir.iterdir()
+                 if d.is_dir() and (d / "points3D.bin").exists()],
+                key=lambda d: int(d.name) if d.name.isdigit() else -1,
+            )
+            if model_dirs:
+                recon_dirs.append(str(model_dirs[-1]))
+                labels.append(method_dir.name.replace("_reconstruction", ""))
+                continue
+
+        # Also check direct method_dir/<N>/ pattern
+        model_dirs = sorted(
+            [d for d in method_dir.iterdir()
+             if d.is_dir() and (d / "points3D.bin").exists()],
+            key=lambda d: int(d.name) if d.name.isdigit() else -1,
+        )
+        if model_dirs:
+            recon_dirs.append(str(model_dirs[-1]))
             labels.append(method_dir.name)
 
     return recon_dirs, labels
@@ -604,3 +686,5 @@ if __name__ == "__main__":
     if args.base_dir:
         compare_timings(args.base_dir,
                         output=str(Path(args.output).with_name("timing_comparison.png")))
+        compare_keypoint_stats(args.base_dir,
+                               output=str(Path(args.output).with_name("keypoint_stats_comparison.png")))

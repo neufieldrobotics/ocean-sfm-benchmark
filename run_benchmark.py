@@ -20,11 +20,12 @@ import pandas as pd
 import seaborn as sns
 from pathlib import Path
 from typing import List, Tuple, Optional
-from itertools import combinations
+from itertools import combinations 
 import json
 import warnings
 warnings.filterwarnings("ignore")
 
+from config import MAX_IMAGE_DIM, DEVICE
 from matchers import init_matchers, MATCHER_NAMES
 from matchers.base import MatchResult, BenchmarkSummary, compute_summary
 
@@ -33,14 +34,14 @@ from matchers.base import MatchResult, BenchmarkSummary, compute_summary
 # Utility Functions
 # ============================================================================
 
-def load_image(path, resize=1024):
+def load_image(path):
     img = cv2.imread(str(path))
     if img is None:
         raise FileNotFoundError(f"Could not load image: {path}")
     h, w = img.shape[:2]
     scale = 1.0
-    if max(h, w) > resize:
-        scale = resize / max(h, w)
+    if max(h, w) > MAX_IMAGE_DIM:
+        scale = MAX_IMAGE_DIM / max(h, w)
         img = cv2.resize(img, None, fx=scale, fy=scale)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     return img, gray, scale
@@ -117,10 +118,118 @@ def visualize_matches(img0, img1, mkpts0, mkpts1, inliers=None,
 # Core Benchmark
 # ============================================================================
 
+def _unload_matcher(matcher):
+    """Free GPU memory held by a matcher."""
+    import gc
+    for attr in ("matching", "loftr", "aliked", "roma", "dkm",
+                 "extractor", "matcher", "model"):
+        obj = getattr(matcher, attr, None)
+        if obj is not None:
+            if hasattr(obj, "cpu"):
+                try:
+                    obj.cpu()
+                except Exception:
+                    pass
+            setattr(matcher, attr, None)
+    del matcher
+    gc.collect()
+    import torch
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+
+
+def _save_method_csv(results, output_dir, method_name):
+    """Save per-method results CSV (incremental, won't overwrite other methods)."""
+    safe_name = method_name.replace("+", "_").replace(" ", "_")
+    df = pd.DataFrame([
+        {"method": r.method, "img0": r.img0_name, "img1": r.img1_name,
+         "matches": r.num_matches, "inliers": r.num_inliers,
+         "inlier_ratio": r.inlier_ratio, "time": r.time_taken}
+        for r in results
+    ])
+    path = output_dir / f"results_{safe_name}.csv"
+    df.to_csv(path, index=False)
+    print(f"  Saved: {path}")
+
+
+def _load_all_method_csvs(output_dir):
+    """Load all per-method result CSVs and combine."""
+    output_dir = Path(output_dir)
+    dfs = []
+    for csv_path in sorted(output_dir.glob("results_*.csv")):
+        df = pd.read_csv(csv_path)
+        if len(df) > 0:
+            dfs.append(df)
+            print(f"  Loaded: {csv_path.name} ({len(df)} rows, method={df['method'].iloc[0]})")
+    if dfs:
+        return pd.concat(dfs, ignore_index=True)
+    return pd.DataFrame()
+
+
+def combine_results(output_dir, image_dir=None):
+    """Combine all per-method CSVs and generate plots + summary."""
+    output_dir = Path(output_dir)
+    print("\nCombining results from per-method CSVs...")
+    df = _load_all_method_csvs(output_dir)
+    if df.empty:
+        print("No results found!")
+        return
+
+    # Reconstruct MatchResult objects for compatibility
+    all_results = []
+    for _, row in df.iterrows():
+        all_results.append(MatchResult(
+            method=row["method"], img0_name=row["img0"], img1_name=row["img1"],
+            num_matches=int(row["matches"]), num_inliers=int(row["inliers"]),
+            inlier_ratio=float(row["inlier_ratio"]), time_taken=float(row["time"]),
+            mkpts0=np.array([]), mkpts1=np.array([]),
+        ))
+
+    methods = df["method"].unique().tolist()
+    summaries = [compute_summary(all_results, m) for m in methods]
+
+    # Print summary
+    print(f"\n{'Method':<15} {'Pairs':>6} {'Avg Match':>10} {'Avg Inlier':>11} "
+          f"{'Inlier %':>9} {'Avg Time':>9} {'Success':>8}")
+    print("-" * 80)
+    for s in summaries:
+        print(f"{s.method:<15} {s.total_pairs:>6} {s.avg_matches:>10.1f} "
+              f"{s.avg_inliers:>11.1f} {s.avg_inlier_ratio:>8.1%} "
+              f"{s.avg_time:>8.2f}s {s.success_rate:>7.1f}%")
+
+    # Save combined CSV
+    df.to_csv(output_dir / "detailed_results.csv", index=False)
+    df_summary = pd.DataFrame([
+        {"method": s.method, "total_pairs": s.total_pairs,
+         "avg_matches": s.avg_matches, "std_matches": s.std_matches,
+         "avg_inliers": s.avg_inliers, "std_inliers": s.std_inliers,
+         "avg_inlier_ratio": s.avg_inlier_ratio,
+         "avg_time": s.avg_time, "total_time": s.total_time,
+         "success_rate": s.success_rate}
+        for s in summaries
+    ])
+    df_summary.to_csv(output_dir / "summary.csv", index=False)
+
+    # Use a dummy matchers list for plot generation
+    class _DummyMatcher:
+        def __init__(self, name): self.name = name
+    dummy_matchers = [_DummyMatcher(m) for m in methods]
+
+    # Reconstruct pairs list from data
+    pairs_set = list(dict.fromkeys(zip(df["img0"], df["img1"])))
+
+    _generate_plots(all_results, summaries, dummy_matchers, pairs_set, output_dir)
+
+    print(f"\nCombined results saved to: {output_dir}")
+
+
 def run_benchmark(image_dir, output_dir="./benchmark_results",
                   pair_mode="sequential", save_visualizations=True,
                   method_names=None):
-    """Run full benchmark across all image pairs."""
+    """Run benchmark one method at a time to avoid OOM. Results saved per-method."""
+    import torch
+
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)
     vis_dir = output_dir / "visualizations"
@@ -134,44 +243,56 @@ def run_benchmark(image_dir, output_dir="./benchmark_results",
 
     pairs = generate_pairs(image_files, pair_mode)
 
-    print("\nInitializing matchers...")
-    matchers = init_matchers(method_names)
-    print(f"\nActive matchers: {[m.name for m in matchers]}")
+    from matchers import AVAILABLE_MATCHERS, MATCHER_NAMES as ALL_KEYS
+
+    # Resolve registry keys to run
+    if method_names is None:
+        registry_keys = list(ALL_KEYS)
+    else:
+        registry_keys = [k for k in method_names if k in AVAILABLE_MATCHERS]
+        for u in [k for k in method_names if k not in AVAILABLE_MATCHERS]:
+            print(f"  Unknown matcher: {u}, skipping.")
+
+    print(f"\nMethods to benchmark: {registry_keys}")
 
     all_results: List[MatchResult] = []
 
-    print("\n" + "=" * 70)
-    print("RUNNING BENCHMARK")
-    print("=" * 70)
+    for method_key in registry_keys:
+        print(f"\n{'='*70}")
+        print(f"  BENCHMARKING: {method_key}")
+        print(f"{'='*70}")
 
-    for pair_idx, (path0, path1) in enumerate(pairs):
-        print(f"\nPair {pair_idx + 1}/{len(pairs)}: {path0.name} <-> {path1.name}")
+        # Init single matcher by registry key
+        matcher_list = init_matchers([method_key])
+        if not matcher_list:
+            print(f"  Failed to init {method_key}, skipping.")
+            continue
+        matcher = matcher_list[0]
+        method_name = matcher.name  # display name for CSVs/plots
 
-        img0, _, _ = load_image(str(path0))
-        img1, _, _ = load_image(str(path1))
+        method_results = []
 
-        pair_visualizations = []
-
-        for matcher in matchers:
-            print(f"  {matcher.name}...", end=" ", flush=True)
+        for pair_idx, (path0, path1) in enumerate(pairs):
+            print(f"  Pair {pair_idx + 1}/{len(pairs)}: {path0.name} <-> {path1.name}",
+                  end=" ", flush=True)
             result = matcher(str(path0), str(path1))
-            all_results.append(result)
-            print(f"Matches: {result.num_matches:4d}, Inliers: {result.num_inliers:4d}, "
-                  f"Ratio: {result.inlier_ratio:.2%}, Time: {result.time_taken:.2f}s")
+            method_results.append(result)
+            print(f"M:{result.num_matches:4d} I:{result.num_inliers:4d} "
+                  f"R:{result.inlier_ratio:.0%} T:{result.time_taken:.2f}s")
 
             if save_visualizations and result.num_matches > 0:
+                img0, _, _ = load_image(str(path0))
+                img1, _, _ = load_image(str(path1))
                 mkpts0_vis = result.mkpts0.copy()
                 mkpts1_vis = result.mkpts1.copy()
 
-                # Scale RoMa/DKM coords to visualization size
-                if matcher.name in ("RoMa", "DKM"):
+                if matcher.name in ("RoMa", "RoMa-full", "DKM"):
                     orig_img0 = cv2.imread(str(path0))
                     orig_img1 = cv2.imread(str(path1))
-                    h0_orig, w0_orig = orig_img0.shape[:2]
-                    h1_orig, w1_orig = orig_img1.shape[:2]
                     h0_vis, w0_vis = img0.shape[:2]
+                    h0_orig, w0_orig = orig_img0.shape[:2]
                     h1_vis, w1_vis = img1.shape[:2]
-
+                    h1_orig, w1_orig = orig_img1.shape[:2]
                     mkpts0_vis[:, 0] *= w0_vis / w0_orig
                     mkpts0_vis[:, 1] *= h0_vis / h0_orig
                     mkpts1_vis[:, 0] *= w1_vis / w1_orig
@@ -181,56 +302,32 @@ def run_benchmark(image_dir, output_dir="./benchmark_results",
                     img0, img1, mkpts0_vis, mkpts1_vis, result.inliers,
                     f"{result.method} | M:{result.num_matches} "
                     f"I:{result.num_inliers} ({result.inlier_ratio:.0%})")
-                pair_visualizations.append((result.method, vis))
+                cv2.imwrite(str(vis_dir / f"pair_{pair_idx:03d}_{path0.stem}_{path1.stem}_{method_name}.png"), vis)
 
-        if save_visualizations and pair_visualizations:
-            n = len(pair_visualizations)
-            fig, axes = plt.subplots(n, 1, figsize=(16, 4 * n))
-            if n == 1:
-                axes = [axes]
-            for ax, (method, vis) in zip(axes, pair_visualizations):
-                ax.imshow(cv2.cvtColor(vis, cv2.COLOR_BGR2RGB))
-                ax.set_ylabel(method, fontsize=14, fontweight="bold",
-                              rotation=0, labelpad=60, va="center")
-                ax.set_xticks([])
-                ax.set_yticks([])
-            fig.suptitle(f"Pair {pair_idx + 1}: {path0.name} <-> {path1.name}",
-                         fontsize=16, fontweight="bold")
-            plt.tight_layout()
-            plt.savefig(vis_dir / f"pair_{pair_idx:03d}_{path0.stem}_{path1.stem}.png",
-                        dpi=100, bbox_inches="tight")
-            plt.close()
+        # Save this method's results
+        _save_method_csv(method_results, output_dir, method_name)
+        all_results.extend(method_results)
 
-            for method, vis in pair_visualizations:
-                cv2.imwrite(str(vis_dir / f"pair_{pair_idx:03d}_{path0.stem}_{path1.stem}_{method}.png"), vis)
+        # Print method summary
+        s = compute_summary(method_results, method_name)
+        print(f"\n  {method_name}: Avg Inliers={s.avg_inliers:.0f}, "
+              f"Inlier%={s.avg_inlier_ratio:.1%}, Time={s.avg_time:.2f}s")
 
-    # Summaries
-    print("\n" + "=" * 70)
-    print("BENCHMARK SUMMARY")
-    print("=" * 70)
+        # Unload matcher and free GPU
+        _unload_matcher(matcher)
+        del matcher_list, method_results
 
-    summaries = [compute_summary(all_results, m.name) for m in matchers]
-
-    print(f"\n{'Method':<12} {'Pairs':>6} {'Avg Match':>10} {'Avg Inlier':>11} "
-          f"{'Inlier %':>9} {'Avg Time':>9} {'Success':>8}")
-    print("-" * 70)
-    for s in summaries:
-        print(f"{s.method:<12} {s.total_pairs:>6} {s.avg_matches:>10.1f} "
-              f"{s.avg_inliers:>11.1f} {s.avg_inlier_ratio:>8.1%} "
-              f"{s.avg_time:>8.2f}s {s.success_rate:>7.1f}%")
-
-    # Save CSVs
-    _save_csvs(all_results, summaries, output_dir)
-
-    # Generate plots
-    _generate_plots(all_results, summaries, matchers, pairs, output_dir)
+    # Generate combined summary + plots
+    combine_results(output_dir)
 
     # Generate report
-    _generate_report(all_results, summaries, image_dir, image_files,
-                     pairs, pair_mode, output_dir)
+    method_display_names = list(dict.fromkeys(r.method for r in all_results))
+    _generate_report(all_results,
+                     [compute_summary(all_results, m) for m in method_display_names],
+                     image_dir, image_files, pairs, pair_mode, output_dir)
 
     print(f"\nResults saved to: {output_dir}")
-    return all_results, summaries
+    return all_results, None
 
 
 # ============================================================================
@@ -308,10 +405,10 @@ def run_viewpoint_analysis(image_dir, output_dir="./benchmark_results",
     colors = plt.cm.tab10(np.linspace(0, 1, max(len(methods), 3)))
 
     for ax, metric, ylabel, title in [
-        (axes[0, 0], "avg_inliers", "Average Inliers", "Inliers vs Gap Size"),
-        (axes[0, 1], "avg_inlier_ratio", "Average Inlier Ratio", "Inlier Ratio vs Gap Size"),
-        (axes[1, 0], "avg_matches", "Average Matches", "Matches vs Gap Size"),
-        (axes[1, 1], "success_rate", "Success Rate (%)", "Success Rate vs Gap Size"),
+        (axes[0, 0], "avg_inliers", "Average Inliers", "Inliers vs Viewpoint Gap"),
+        (axes[0, 1], "avg_inlier_ratio", "Average Inlier Ratio", "Inlier Ratio vs Viewpoint Gap"),
+        (axes[1, 0], "avg_matches", "Average Matches", "Matches vs Viewpoint Gap"),
+        (axes[1, 1], "success_rate", "Success Rate (%)", "Success Rate vs Viewpoint Gap"),
     ]:
         for i, method in enumerate(methods):
             mdata = agg[agg["method"] == method]
@@ -487,6 +584,164 @@ Output Files:
 
 
 # ============================================================================
+# Feature Detection Analysis
+# ============================================================================
+
+def run_feature_detection_analysis(image_dir, output_dir="./benchmark_results"):
+    """Count raw features per image per detector and plot results.
+
+    Uses the extractors module (same config as COLMAP pipeline) to extract
+    features from each image and count them — uncapped, at MAX_IMAGE_DIM.
+    """
+    import torch
+    from extractors.lightglue_extractor import LightGlueExtractor
+    from extractors.superpoint_superglue import SuperPointSuperGlueExtractor
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(exist_ok=True, parents=True)
+
+    image_files = get_image_files(image_dir)
+    device = DEVICE
+
+    # Detectors to evaluate (sparse only — dense matchers don't have per-image features)
+    detectors = {}
+
+    # SIFT (OpenCV)
+    print("Initializing detectors...")
+    sift = cv2.SIFT_create(nfeatures=0)  # uncapped
+    detectors["SIFT"] = ("opencv", sift)
+
+    try:
+        ext = SuperPointSuperGlueExtractor(device)
+        detectors["SuperPoint"] = ("extractor", ext)
+    except Exception as e:
+        print(f"  SuperPoint init failed: {e}")
+
+    for feat_type in ("aliked", "disk"):
+        try:
+            ext = LightGlueExtractor(feat_type, device)
+            detectors[feat_type.upper()] = ("extractor", ext)
+        except Exception as e:
+            print(f"  {feat_type.upper()} init failed: {e}")
+
+    print(f"Active detectors: {list(detectors.keys())}")
+
+    # Count features per image per detector
+    counts = {name: [] for name in detectors}
+    image_names = []
+
+    print("\nCounting features per image...")
+    for img_path in image_files:
+        image_names.append(img_path.name)
+        img_bgr, gray, scale = load_image(str(img_path))
+
+        for name, (dtype, det) in detectors.items():
+            try:
+                if dtype == "opencv":
+                    kps = det.detect(gray, None)
+                    n = len(kps)
+                else:
+                    feat = det.extract_features_image(img_path)
+                    n = len(feat["kps_orig"]) if feat is not None else 0
+                counts[name].append(n)
+            except Exception as e:
+                print(f"  {name} failed on {img_path.name}: {e}")
+                counts[name].append(0)
+
+        print(f"  {img_path.name}: " +
+              " | ".join(f"{k}:{counts[k][-1]}" for k in detectors))
+
+        if device == "cuda":
+            torch.cuda.empty_cache()
+
+    # Save to JSON
+    stats = {}
+    for name in detectors:
+        c = counts[name]
+        stats[name] = {
+            "per_image": dict(zip(image_names, c)),
+            "mean": float(np.mean(c)),
+            "median": float(np.median(c)),
+            "min": int(np.min(c)),
+            "max": int(np.max(c)),
+            "total": int(np.sum(c)),
+        }
+
+    with open(output_dir / "feature_detection_stats.json", "w") as f:
+        json.dump(stats, f, indent=2)
+
+    # Plot
+    detector_names = list(detectors.keys())
+    n = len(detector_names)
+    colors = plt.cm.tab10(np.linspace(0, 1, max(n, 3)))
+
+    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+    fig.suptitle(f"Raw Feature Detection (uncapped, {MAX_IMAGE_DIM}px)",
+                 fontsize=16, fontweight="bold")
+
+    # 1. Mean feature count bar chart
+    ax = axes[0]
+    means = [stats[d]["mean"] for d in detector_names]
+    bars = ax.bar(detector_names, means, color=colors[:n])
+    ax.set_title("Mean Features per Image")
+    ax.set_ylabel("Count")
+    ax.tick_params(axis="x", rotation=30)
+    for bar, v in zip(bars, means):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+                f"{v:,.0f}", ha="center", va="bottom", fontsize=9)
+
+    # 2. Box plot of per-image distributions
+    ax = axes[1]
+    data = [counts[d] for d in detector_names]
+    bp = ax.boxplot(data, labels=detector_names, patch_artist=True, showfliers=False)
+    for patch, c in zip(bp["boxes"], colors[:n]):
+        patch.set_facecolor(c)
+    ax.set_title("Feature Count Distribution")
+    ax.set_ylabel("Count")
+    ax.tick_params(axis="x", rotation=30)
+
+    # 3. Per-image line plot (feature count across the image sequence)
+    ax = axes[2]
+    x = range(len(image_names))
+    for i, name in enumerate(detector_names):
+        ax.plot(x, counts[name], marker=".", markersize=3,
+                label=name, color=colors[i], linewidth=1.5, alpha=0.8)
+    ax.set_xlabel("Image Index")
+    ax.set_ylabel("Feature Count")
+    ax.set_title("Features per Image (sequence)")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(output_dir / "feature_detection_analysis.png",
+                dpi=150, bbox_inches="tight")
+    plt.close()
+
+    # Print summary table
+    print("\n" + "=" * 70)
+    print(f"{'Detector':<15} {'Mean':>10} {'Median':>10} {'Min':>8} {'Max':>8} {'Total':>12}")
+    print("=" * 70)
+    for d in detector_names:
+        s = stats[d]
+        print(f"{d:<15} {s['mean']:>10,.0f} {s['median']:>10,.0f} "
+              f"{s['min']:>8,} {s['max']:>8,} {s['total']:>12,}")
+    print("=" * 70)
+
+    # Cleanup
+    for name, (dtype, det) in detectors.items():
+        if dtype == "extractor" and hasattr(det, 'matching'):
+            del det.matching
+        if dtype == "extractor":
+            del det
+    if device == "cuda":
+        torch.cuda.empty_cache()
+
+    print(f"\nSaved: {output_dir / 'feature_detection_analysis.png'}")
+    print(f"Saved: {output_dir / 'feature_detection_stats.json'}")
+    return stats
+
+
+# ============================================================================
 # Entry Point
 # ============================================================================
 
@@ -504,7 +759,7 @@ if __name__ == "__main__":
                              f"Available: {', '.join(MATCHER_NAMES)}")
     parser.add_argument("--sequential", action="store_true",
                         help="Use sequential pairs (0-1, 1-2, ...)")
-    parser.add_argument("--all_pairs", action="store_true",
+    parser.add_argument("--all_pairs", action=        "store_true",
                         help="Use all possible pairs")
     parser.add_argument("--skip_one", action="store_true",
                         help="Skip one image (0-2, 1-3, ...)")
@@ -512,6 +767,10 @@ if __name__ == "__main__":
                         help="Skip saving visualizations")
     parser.add_argument("--multi-gap", action="store_true",
                         help="Run viewpoint resilience analysis at multiple gap sizes")
+    parser.add_argument("--detect", action="store_true",
+                        help="Run raw feature detection analysis (count features per image)")
+    parser.add_argument("--combine", action="store_true",
+                        help="Combine existing per-method CSVs and regenerate plots")
     args = parser.parse_args()
 
     # Parse methods
@@ -520,7 +779,14 @@ if __name__ == "__main__":
     else:
         method_names = [m.strip() for m in args.methods.split(",")]
 
-    if args.multi_gap:
+    if args.combine:
+        combine_results(output_dir=args.output)
+    elif args.detect:
+        run_feature_detection_analysis(
+            image_dir=args.image_dir,
+            output_dir=args.output,
+        )
+    elif args.multi_gap:
         run_viewpoint_analysis(
             image_dir=args.image_dir,
             output_dir=args.output,

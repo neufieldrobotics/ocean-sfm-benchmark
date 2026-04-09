@@ -3,6 +3,11 @@
 import numpy as np
 import torch
 from matchers.base import BaseMatcher
+from config import (
+    MAX_IMAGE_DIM, SP_MAX_KEYPOINTS, SP_KEYPOINT_THRESHOLD, SP_NMS_RADIUS,
+    ALIKED_MAX_KEYPOINTS, ALIKED_DETECTION_THRESHOLD, ALIKED_NMS_RADIUS,
+    DISK_MAX_KEYPOINTS,
+)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -36,13 +41,21 @@ class LightGlueMatcher(BaseMatcher):
 
             if self.feature_type == "superpoint":
                 from lightglue import SuperPoint
-                self.extractor = SuperPoint(max_num_keypoints=2048).eval().to(device)
+                self.extractor = SuperPoint(
+                    max_num_keypoints=SP_MAX_KEYPOINTS if SP_MAX_KEYPOINTS > 0 else -1,
+                ).eval().to(device)
             elif self.feature_type == "aliked":
                 from lightglue import ALIKED
-                self.extractor = ALIKED(max_num_keypoints=4096).eval().to(device)
+                self.extractor = ALIKED(
+                    max_num_keypoints=ALIKED_MAX_KEYPOINTS if ALIKED_MAX_KEYPOINTS > 0 else -1,
+                    detection_threshold=ALIKED_DETECTION_THRESHOLD,
+                    nms_radius=ALIKED_NMS_RADIUS,
+                ).eval().to(device)
             elif self.feature_type == "disk":
                 from lightglue import DISK
-                self.extractor = DISK(max_num_keypoints=4096).eval().to(device)
+                self.extractor = DISK(
+                    max_num_keypoints=DISK_MAX_KEYPOINTS if DISK_MAX_KEYPOINTS > 0 else -1,
+                ).eval().to(device)
 
             self.matcher = LightGlue(features=self.feature_type).eval().to(device)
         except Exception as e:
@@ -54,14 +67,10 @@ class LightGlueMatcher(BaseMatcher):
         from PIL import Image
 
         img = Image.open(str(path)).convert("RGB")
-        # Resize if too large for benchmark
         w, h = img.size
-        max_dim = 1024
-        if max(w, h) > max_dim:
-            scale = max_dim / max(w, h)
-            new_w, new_h = int(w * scale), int(h * scale)
-            img = img.resize((new_w, new_h), Image.LANCZOS)
-
+        if max(w, h) > MAX_IMAGE_DIM:
+            scale = MAX_IMAGE_DIM / max(w, h)
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
         tensor = TF.to_tensor(img).unsqueeze(0).to(device)
         return tensor
 

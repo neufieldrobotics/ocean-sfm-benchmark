@@ -10,7 +10,7 @@ so we get per-stage timing breakdowns.
 import time
 import subprocess
 from pathlib import Path
-from config import COLMAP_BIN
+from config import COLMAP_BIN, MAX_IMAGE_DIM, MAX_MATCHES_PER_PAIR
 
 
 class NativeColmapExtractor:
@@ -50,6 +50,8 @@ class NativeColmapExtractor:
             COLMAP_BIN, "feature_extractor",
             "--database_path", database_path,
             "--image_path", image_dir,
+            "--FeatureExtraction.max_image_size", str(MAX_IMAGE_DIM),
+            "--SiftExtraction.max_num_features", "0",
             "--SiftExtraction.estimate_affine_shape", "1",
             "--SiftExtraction.domain_size_pooling", "1",
         ], check=True)
@@ -80,7 +82,9 @@ class NativeColmapExtractor:
             "--database_path", database_path,
             "--image_path", image_dir,
             "--FeatureExtraction.type", "ALIKED_N16ROT",
-            "--AlikedExtraction.max_num_features", "8192",
+            "--AlikedExtraction.min_score", "0.01",
+            "--AlikedExtraction.max_num_features", "0",
+            "--AlikedExtraction.n16rot_model_path", "aliked-n16rot-16k.onnx",
         ], check=True)
         extract_time = time.time() - t0
         print(f"  Time: {extract_time:.1f}s")
