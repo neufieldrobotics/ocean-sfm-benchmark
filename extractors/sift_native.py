@@ -51,7 +51,7 @@ class NativeColmapExtractor:
             "--database_path", database_path,
             "--image_path", image_dir,
             "--FeatureExtraction.max_image_size", str(MAX_IMAGE_DIM),
-            "--SiftExtraction.max_num_features", "0",
+            "--SiftExtraction.max_num_features", str(MAX_MATCHES_PER_PAIR),
             "--SiftExtraction.estimate_affine_shape", "1",
             "--SiftExtraction.domain_size_pooling", "1",
         ], check=True)
@@ -79,17 +79,18 @@ class NativeColmapExtractor:
         Uses a patched ONNX model (aliked-n16rot-16k.onnx) because COLMAP's
         bundled aliked-n16rot.onnx has a hardcoded TopK k=4096 limit baked into
         the ONNX graph. The patch (see patch_aliked_onnx.py) raises this to
-        16384, allowing uncapped feature extraction via max_num_features=0.
+        16384, allowing max_num_features up to 16384.
         """
-        print("\n=== ALIKED Feature Extraction (ALIKED_N16ROT, uncapped) ===")
+        print(f"\n=== ALIKED Feature Extraction (ALIKED_N16ROT, cap={MAX_MATCHES_PER_PAIR}) ===")
         t0 = time.time()
         subprocess.run([
             COLMAP_BIN, "feature_extractor",
             "--database_path", database_path,
             "--image_path", image_dir,
+            "--FeatureExtraction.max_image_size", str(MAX_IMAGE_DIM),
             "--FeatureExtraction.type", "ALIKED_N16ROT",
             "--AlikedExtraction.min_score", "0.01",
-            "--AlikedExtraction.max_num_features", "0",
+            "--AlikedExtraction.max_num_features", str(MAX_MATCHES_PER_PAIR),
             "--AlikedExtraction.n16rot_model_path", "aliked-n16rot-16k.onnx",
         ], check=True)
         extract_time = time.time() - t0

@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import torch
 from matchers.base import BaseMatcher
+from config import MAX_MATCHES_PER_PAIR
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -11,7 +12,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DKMMatcher(BaseMatcher):
     name = "DKM"
 
-    def __init__(self, num_samples=5000):
+    def __init__(self, num_samples=MAX_MATCHES_PER_PAIR):
         self.num_samples = num_samples
         self.dkm = None
         self._init_matcher()

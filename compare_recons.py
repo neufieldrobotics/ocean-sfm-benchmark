@@ -24,6 +24,8 @@ except ImportError:
     USE_PYCOLMAP = False
     import struct
 
+import sqlite3
+
 
 # ============================================================================
 # Manual binary parsers (fallback if pycolmap not installed)
@@ -73,6 +75,7 @@ def read_images_bin(path):
                 "camera_id": camera_id,
                 "num_points2D": num_points2D,
                 "num_points3D": len(points2D_ids),
+                "obs_set": frozenset(points2D_ids),
             }
     return images
 
@@ -129,6 +132,48 @@ def angle_between_cameras(qvec1, tvec1, qvec2, tvec2):
 
 
 # ============================================================================
+# Database helpers
+# ============================================================================
+
+_COLMAP_MAX_IMAGE_ID = 2147483647  # matches ColmapDatabase._pair_id()
+
+
+def read_db_pair_stats(db_path):
+    """Read per-pair raw match and inlier counts from a COLMAP database.
+
+    Returns dict keyed by (name_a, name_b) where name_a < name_b:
+        {"matches": int, "inliers": int}
+    """
+    conn = sqlite3.connect(str(db_path))
+    id_to_name = {row[0]: row[1]
+                  for row in conn.execute("SELECT image_id, name FROM images")}
+
+    pair_stats = {}
+
+    for pair_id, rows in conn.execute("SELECT pair_id, rows FROM matches"):
+        id1 = pair_id // _COLMAP_MAX_IMAGE_ID
+        id2 = pair_id % _COLMAP_MAX_IMAGE_ID
+        n1, n2 = id_to_name.get(id1), id_to_name.get(id2)
+        if n1 and n2:
+            key = (min(n1, n2), max(n1, n2))
+            pair_stats.setdefault(key, {"matches": 0, "inliers": 0})
+            pair_stats[key]["matches"] = rows
+
+    for pair_id, rows in conn.execute(
+            "SELECT pair_id, rows FROM two_view_geometries"):
+        id1 = pair_id // _COLMAP_MAX_IMAGE_ID
+        id2 = pair_id % _COLMAP_MAX_IMAGE_ID
+        n1, n2 = id_to_name.get(id1), id_to_name.get(id2)
+        if n1 and n2:
+            key = (min(n1, n2), max(n1, n2))
+            pair_stats.setdefault(key, {"matches": 0, "inliers": 0})
+            pair_stats[key]["inliers"] = rows
+
+    conn.close()
+    return pair_stats
+
+
+# ============================================================================
 # Metric extraction
 # ============================================================================
 
@@ -153,9 +198,10 @@ def extract_metrics(recon_path):
             n_obs = sum(1 for p in img.points2D if p.has_point3D())
             obs_per_image.append(n_obs)
 
-        # Extract poses for angle analysis
+        # Extract poses and observation sets for angle analysis
         # pycolmap 3.13: cam_from_world() is a method, rotation.quat is xyzw order
         image_poses = {}
+        image_obs_sets = {}
         for img_id, img in images.items():
             cfw = img.cam_from_world()
             quat_xyzw = cfw.rotation.quat
@@ -164,6 +210,9 @@ def extract_metrics(recon_path):
                                   quat_xyzw[1], quat_xyzw[2]]),  # convert to wxyz
                 "tvec": np.array(cfw.translation),
             }
+            image_obs_sets[img.name] = frozenset(
+                p.point3D_id for p in img.points2D if p.has_point3D()
+            )
     else:
         pts = read_points3D_bin(recon_path / "points3D.bin")
         imgs = read_images_bin(recon_path / "images.bin")
@@ -176,11 +225,13 @@ def extract_metrics(recon_path):
         obs_per_image = [img["num_points3D"] for img in imgs.values()]
 
         image_poses = {}
+        image_obs_sets = {}
         for img_id, img in imgs.items():
             image_poses[img["name"]] = {
                 "qvec": img["qvec"],
                 "tvec": img["tvec"],
             }
+            image_obs_sets[img["name"]] = img["obs_set"]
 
     errors = np.array(errors)
     track_lengths = np.array(track_lengths)
@@ -194,6 +245,19 @@ def extract_metrics(recon_path):
     metrics["track_lengths"] = track_lengths
     metrics["obs_per_image"] = obs_per_image
     metrics["image_poses"] = image_poses
+    metrics["image_obs_sets"] = image_obs_sets
+
+    # Auto-discover database.db (typically 2 or 1 levels above recon_path)
+    pair_db_stats = {}
+    for candidate in [
+        recon_path.parent.parent / "database.db",  # sparse/N/ -> method_dir/
+        recon_path.parent / "database.db",          # N/ -> sparse/
+    ]:
+        if candidate.exists():
+            pair_db_stats = read_db_pair_stats(candidate)
+            print(f"  DB stats: {candidate.name} ({len(pair_db_stats)} pairs)")
+            break
+    metrics["pair_db_stats"] = pair_db_stats
 
     return metrics
 
@@ -318,6 +382,7 @@ def compare_reconstructions(recon_dirs, labels=None, output="reconstruction_comp
 
     # Pose-based angle analysis
     _analyze_viewing_angles(all_metrics, labels, output_path.parent)
+    _plot_viewing_angle_vs_inliers(all_metrics, labels, output_path.parent)
 
 
 def _analyze_viewing_angles(all_metrics, labels, output_dir):
@@ -394,6 +459,134 @@ def _analyze_viewing_angles(all_metrics, labels, output_dir):
     plt.savefig(angle_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Saved: {angle_path}")
+
+
+def _plot_viewing_angle_vs_inliers(all_metrics, labels, output_dir):
+    """Plot true inliers (from DB) and co-visibility (from reconstruction) vs viewing angle.
+
+    4-panel figure:
+      Top-left:  True inlier count (two_view_geometries.rows) vs angle
+      Top-right: True inlier ratio (inliers / raw_matches) vs angle
+      Bot-left:  Co-visible 3D points (|obs_i ∩ obs_j|) vs angle
+      Bot-right: Co-visibility ratio (shared / min(|obs_i|, |obs_j|)) vs angle
+    """
+    output_dir = Path(output_dir)
+
+    has_poses = any(len(all_metrics[l]["image_poses"]) >= 2 for l in labels)
+    if not has_poses:
+        print("\nSkipping viewing angle vs inliers analysis (no pose data)")
+        return
+
+    print("\n--- Viewing Angle vs Inliers Analysis ---")
+
+    angle_bin_edges = [0, 5, 10, 15, 20, 30, 45, 90]
+    n_bins = len(angle_bin_edges) - 1
+    bin_centers = [
+        (angle_bin_edges[i] + angle_bin_edges[i + 1]) / 2
+        for i in range(n_bins)
+    ]
+    bin_tick_labels = [
+        f"{angle_bin_edges[i]}-{angle_bin_edges[i+1]}°"
+        for i in range(n_bins)
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle(
+        "Viewing Angle vs Inliers / Co-visibility (per-method)",
+        fontsize=14, fontweight="bold"
+    )
+    colors = plt.cm.tab10(np.linspace(0, 1, max(len(labels), 3)))
+
+    for idx, label in enumerate(labels):
+        poses = all_metrics[label]["image_poses"]
+        obs_sets = all_metrics[label].get("image_obs_sets", {})
+        db_stats = all_metrics[label].get("pair_db_stats", {})
+
+        if len(poses) < 2:
+            continue
+
+        names = sorted(poses.keys())
+
+        # Per-bin accumulators
+        bin_true_inliers  = [[] for _ in range(n_bins)]
+        bin_inlier_ratio  = [[] for _ in range(n_bins)]
+        bin_covis_pts     = [[] for _ in range(n_bins)]
+        bin_covis_ratio   = [[] for _ in range(n_bins)]
+
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                n1, n2 = names[i], names[j]
+                p1, p2 = poses[n1], poses[n2]
+
+                ang = angle_between_cameras(
+                    p1["qvec"], p1["tvec"], p2["qvec"], p2["tvec"])
+
+                # Find angle bin
+                b = None
+                for k in range(n_bins):
+                    if angle_bin_edges[k] <= ang < angle_bin_edges[k + 1]:
+                        b = k
+                        break
+                if b is None:
+                    continue
+
+                # True inliers from DB
+                db_key = (min(n1, n2), max(n1, n2))
+                if db_key in db_stats:
+                    s = db_stats[db_key]
+                    inliers = s["inliers"]
+                    matches = s["matches"]
+                    bin_true_inliers[b].append(inliers)
+                    if matches > 0:
+                        bin_inlier_ratio[b].append(inliers / matches)
+
+                # Co-visibility from 3D reconstruction
+                o1 = obs_sets.get(n1, frozenset())
+                o2 = obs_sets.get(n2, frozenset())
+                if o1 and o2:
+                    shared = len(o1 & o2)
+                    bin_covis_pts[b].append(shared)
+                    bin_covis_ratio[b].append(shared / min(len(o1), len(o2)))
+
+        def _means(bins):
+            return [np.mean(b) if b else np.nan for b in bins]
+
+        def _plot(ax, bins, ylabel, title):
+            means = _means(bins)
+            valid = [(bc, m) for bc, m in zip(bin_centers, means)
+                     if not np.isnan(m)]
+            if not valid:
+                return
+            vbc, vm = zip(*valid)
+            ax.plot(vbc, vm, marker="o", linewidth=2,
+                    label=label, color=colors[idx])
+            ax.set_xticks(bin_centers)
+            ax.set_xticklabels(bin_tick_labels, rotation=30, ha="right", fontsize=8)
+            ax.set_xlabel("Viewing Angle Bin")
+            ax.set_ylabel(ylabel)
+            ax.set_title(title)
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.3)
+
+        _plot(axes[0, 0], bin_true_inliers,
+              "Mean Inlier Count", "True Inliers vs Viewing Angle\n(two_view_geometries)")
+        _plot(axes[0, 1], bin_inlier_ratio,
+              "Mean Inlier Ratio (inliers / raw matches)", "True Inlier Ratio vs Viewing Angle")
+        _plot(axes[1, 0], bin_covis_pts,
+              "Mean Co-visible 3D Points", "Co-visible 3D Points vs Viewing Angle\n(reconstruction)")
+        _plot(axes[1, 1], bin_covis_ratio,
+              "Mean Co-visibility Ratio", "Co-visibility Ratio vs Viewing Angle\n(shared / min(obs_i, obs_j))")
+
+        n_db_pairs = sum(len(b) for b in bin_true_inliers)
+        n_covis_pairs = sum(len(b) for b in bin_covis_pts)
+        print(f"  {label}: {n_db_pairs} pairs with DB inliers, "
+              f"{n_covis_pairs} pairs with co-visibility data")
+
+    plt.tight_layout()
+    out_path = output_dir / "viewing_angle_vs_inliers.png"
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {out_path}")
 
 
 # ============================================================================

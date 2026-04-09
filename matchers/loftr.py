@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from matchers.base import BaseMatcher
 from matchers.sift import load_image
-from config import LOFTR_CONFIDENCE_THRESHOLD
+from config import LOFTR_CONFIDENCE_THRESHOLD, MAX_MATCHES_PER_PAIR
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -47,4 +47,11 @@ class LoFTRMatcher(BaseMatcher):
         conf = result["confidence"].cpu().numpy()
 
         mask = conf > self.confidence_thresh
-        return mkpts0[mask], mkpts1[mask]
+        mkpts0, mkpts1, conf = mkpts0[mask], mkpts1[mask], conf[mask]
+
+        # Cap at MAX_MATCHES_PER_PAIR by confidence (highest first)
+        if len(conf) > MAX_MATCHES_PER_PAIR:
+            idx = np.argsort(conf)[::-1][:MAX_MATCHES_PER_PAIR]
+            mkpts0, mkpts1 = mkpts0[idx], mkpts1[idx]
+
+        return mkpts0, mkpts1

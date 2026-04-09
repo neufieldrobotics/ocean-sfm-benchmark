@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from typing import Tuple
 from matchers.base import BaseMatcher
-from config import MAX_IMAGE_DIM
+from config import MAX_IMAGE_DIM, MAX_MATCHES_PER_PAIR
 
 
 def load_image(path):
@@ -24,7 +24,7 @@ def load_image(path):
 class SIFTMatcher(BaseMatcher):
     name = "SIFT"
 
-    def __init__(self, nfeatures=0, ratio_thresh=0.75):
+    def __init__(self, nfeatures=MAX_MATCHES_PER_PAIR, ratio_thresh=0.75):
         self.sift = cv2.SIFT_create(nfeatures=nfeatures)
         self.ratio_thresh = ratio_thresh
 

@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from PIL import Image
 from matchers.base import BaseMatcher
-from config import MAX_IMAGE_DIM
+from config import MAX_IMAGE_DIM, MAX_MATCHES_PER_PAIR
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -13,7 +13,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class RoMaMatcher(BaseMatcher):
     name = "RoMa"
 
-    def __init__(self, num_samples=5000, variant="tiny"):
+    def __init__(self, num_samples=MAX_MATCHES_PER_PAIR, variant="tiny"):
         self.num_samples = num_samples
         self.variant = variant
         self.roma = None
