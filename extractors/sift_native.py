@@ -74,8 +74,14 @@ class NativeColmapExtractor:
         }
 
     def _run_aliked(self, image_dir, database_path):
-        """ALIKED_N16ROT extraction + LightGlue matching."""
-        print("\n=== ALIKED Feature Extraction (ALIKED_N16ROT, 8192 features) ===")
+        """ALIKED_N16ROT extraction + LightGlue matching.
+
+        Uses a patched ONNX model (aliked-n16rot-16k.onnx) because COLMAP's
+        bundled aliked-n16rot.onnx has a hardcoded TopK k=4096 limit baked into
+        the ONNX graph. The patch (see patch_aliked_onnx.py) raises this to
+        16384, allowing uncapped feature extraction via max_num_features=0.
+        """
+        print("\n=== ALIKED Feature Extraction (ALIKED_N16ROT, uncapped) ===")
         t0 = time.time()
         subprocess.run([
             COLMAP_BIN, "feature_extractor",

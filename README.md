@@ -219,7 +219,7 @@ All detectors operate under identical conditions:
 ## Notes
 
 - **SIFT** uses COLMAP's native Covariant SIFT with guided matching
-- **ALIKED** uses ALIKED-N16ROT (rotation-equivariant) consistently across native COLMAP, extractors, and matchers
+- **ALIKED** uses ALIKED-N16ROT (rotation-equivariant) consistently across native COLMAP, extractors, and matchers. COLMAP's bundled `aliked-n16rot.onnx` has a **hardcoded TopK k=4096** in the ONNX graph that silently caps features regardless of `max_num_features`. We patch it with `patch_aliked_onnx.py` to raise the limit to 16384 (`aliked-n16rot-16k.onnx`)
 - **RoMa Full** uses `upsample_res=560` to fit in 32GB VRAM; model reloads every 10 pairs to manage VRAM leaks
 - **Dense matchers** (LoFTR, RoMa, DKM) use `KeypointAggregator` for COLMAP integration — per-image keypoint counts can exceed `MAX_MATCHES_PER_PAIR` due to aggregation across all pairs
 - **DISK** requires a positive `max_num_keypoints` (kornia limitation); set to `MAX_MATCHES_PER_PAIR`
