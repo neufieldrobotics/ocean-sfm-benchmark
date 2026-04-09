@@ -115,23 +115,23 @@ Harsh-Feature-Bench/
 ### Run COLMAP Reconstruction
 
 ```bash
-# Single method
+# Single method (sparse only by default)
 python run_colmap.py --method sift --images ./images --output ./MVS/sift
-
-# Sparse only (skip dense MVS)
-python run_colmap.py --method disk+lightglue --images ./images --skip-dense --output ./MVS/disk
 
 # Multiple methods
 python run_colmap.py --method sift,aliked,superpoint+superglue --images ./images --output ./MVS
 
 # All methods
 python run_colmap.py --method all --images ./images --output ./MVS
+
+# Include dense reconstruction (MVS)
+python run_colmap.py --method sift --images ./images --output ./MVS/sift --dense
 ```
 
 Each run produces:
 - `database.db` — COLMAP database with keypoints, matches, two-view geometries
 - `sparse/<N>/` — COLMAP sparse reconstruction
-- `dense/fused.ply` — Dense point cloud (unless `--skip-dense`)
+- `dense/fused.ply` — Dense point cloud (only with `--dense`)
 - `timings.json` — Per-stage timing breakdown
 - `keypoint_stats.json` — Per-image keypoint counts
 

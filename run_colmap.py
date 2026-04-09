@@ -5,12 +5,12 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 """Single entry point for COLMAP reconstruction with any feature method.
 
 Usage:
-    python run_colmap.py --method sift --images ./Section-25-PNGs-Win
-    python run_colmap.py --method aliked --images ./Section-25-PNGs-Win
-    python run_colmap.py --method superpoint+superglue --images ./images --output ./recon
-    python run_colmap.py --method disk+lightglue --images ./images --skip-dense
-    python run_colmap.py --method loftr,roma --images ./images
-    python run_colmap.py --method all --images ./images --output ./results
+    python run_colmap.py --method sift --images ./images --output ./MVS/sift
+    python run_colmap.py --method aliked --images ./images --output ./MVS/aliked
+    python run_colmap.py --method superpoint+superglue --images ./images --output ./MVS/sp-sg
+    python run_colmap.py --method loftr,roma --images ./images --output ./MVS
+    python run_colmap.py --method all --images ./images --output ./MVS
+    python run_colmap.py --method sift --images ./images --output ./MVS/sift --dense  # include MVS
 """
 
 import argparse
@@ -30,7 +30,7 @@ from colmap_pipeline import (
 )
 
 
-def run_single_method(method, image_dir, output_dir, skip_dense=False,
+def run_single_method(method, image_dir, output_dir, run_dense=False,
                       quality="high"):
     """Run full COLMAP pipeline for one method."""
     print(f"\n{'='*70}")
@@ -79,7 +79,7 @@ def run_single_method(method, image_dir, output_dir, skip_dense=False,
         return
 
     # Dense reconstruction
-    if not skip_dense:
+    if run_dense:
         mvs_timings = run_colmap_mvs(image_dir, sparse_model, dense_path)
         timings.update(mvs_timings)
 
@@ -101,8 +101,8 @@ def main():
                         help="Path to image directory")
     parser.add_argument("--output", "-o", default=None,
                         help="Output directory (default: ./results/<method>_reconstruction)")
-    parser.add_argument("--skip-dense", action="store_true",
-                        help="Skip dense reconstruction (MVS) stages")
+    parser.add_argument("--dense", action="store_true",
+                        help="Run dense reconstruction (MVS) stages (off by default)")
     parser.add_argument("--quality", default="high",
                         choices=["low", "medium", "high", "extreme"],
                         help="Quality level for native COLMAP methods (default: high)")
@@ -126,7 +126,7 @@ def main():
 
         try:
             run_single_method(method, args.images, output_dir,
-                              args.skip_dense, args.quality)
+                              args.dense, args.quality)
         except Exception as e:
             print(f"\nERROR running {method}: {e}")
             import traceback
