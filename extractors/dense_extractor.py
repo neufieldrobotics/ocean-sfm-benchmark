@@ -12,8 +12,8 @@ from pathlib import Path
 from extractors.base import BaseExtractor
 from config import (
     MAX_IMAGE_DIM, LOFTR_CONFIDENCE_THRESHOLD,
-    ROMA_MAX_KEYPOINTS_PER_PAIR,
-    DKM_MAX_KEYPOINTS_PER_PAIR,
+    ROMA_MAX_KEYPOINTS_PER_PAIR, ROMA_CONFIDENCE_THRESHOLD,
+    DKM_MAX_KEYPOINTS_PER_PAIR, MIN_INLIERS,
 )
 
 
@@ -242,18 +242,39 @@ class DenseExtractor(BaseExtractor):
                 if warp.dim() == 4:
                     warp, certainty = warp[0], certainty[0]
 
-                # Use romatch's own sampler rather than a top-k over certainty.
-                # sample() runs in "threshold_balanced" mode: it clamps
-                # certainty above sample_thresh, draws 4N candidates by
-                # multinomial, then resamples N of them weighted by inverse KDE
-                # density. That inverse-density step is what spreads
-                # correspondences over the whole frame. Selecting the N most
-                # certain pixels instead concentrates them in a few
-                # high-texture patches (measured: 22% vs 88% of a 16x16 image
-                # grid occupied), which leaves the pose and triangulation
-                # poorly conditioned and inflates reprojection error.
-                matches, cert = self.model.sample(
-                    warp, certainty, num=ROMA_MAX_KEYPOINTS_PER_PAIR)
+                # Correspondence selection combines a certainty floor with
+                # romatch's inverse-density balancing. Both halves matter:
+                #
+                #  * Balancing (from sample()) spreads correspondences over the
+                #    frame. A plain top-k over certainty keeps only the most
+                #    confident pixels, which cluster in a few high-texture
+                #    patches -- measured at 22% vs 88% of a 16x16 image grid --
+                #    leaving pose and triangulation poorly conditioned.
+                #  * The floor is still needed. sample() runs in
+                #    "threshold_balanced" mode, which clamps every certainty
+                #    above sample_thresh (0.05) to 1.0, so on its own it draws
+                #    uniformly from everything above 0.05 and admits many weak
+                #    correspondences. On the glacier sequence that dropped the
+                #    per-pair inlier ratio from 0.64 to 0.46 and pushed marginal
+                #    pairs below MIN_INLIER_RATIO, cutting verified pairs from
+                #    1211 to 397.
+                #
+                # Zeroing sub-threshold certainty makes multinomial ineligible
+                # to draw those pixels, so balancing operates only among
+                # correspondences that clear the floor.
+                certainty = certainty.clone()
+                certainty[certainty < ROMA_CONFIDENCE_THRESHOLD] = 0
+                n_eligible = int(torch.count_nonzero(certainty))
+                if n_eligible < MIN_INLIERS:
+                    del warp, certainty
+                    torch.cuda.empty_cache()
+                    return None, None, None
+
+                # sample() draws 4*num candidates without replacement before
+                # the density pass, so num must not exceed a quarter of the
+                # eligible population or multinomial raises.
+                num = max(1, min(ROMA_MAX_KEYPOINTS_PER_PAIR, n_eligible // 4))
+                matches, cert = self.model.sample(warp, certainty, num=num)
 
                 del warp, certainty
 
