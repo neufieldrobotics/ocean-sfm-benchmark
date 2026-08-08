@@ -34,6 +34,9 @@ DISK_MAX_KEYPOINTS = MAX_MATCHES_PER_PAIR  # DISK/kornia doesn't support -1 (unl
 
 # Dense matchers
 ROMA_MAX_KEYPOINTS_PER_PAIR = MAX_MATCHES_PER_PAIR
+# Unused by the RoMa extractor: romatch's sample() applies its own
+# sample_thresh (0.05) and then inverse-density resampling, so imposing an
+# extra certainty cut here would re-bias selection toward high-texture regions.
 ROMA_CONFIDENCE_THRESHOLD = 0.1
 LOFTR_MAX_DIM = MAX_IMAGE_DIM
 LOFTR_CONFIDENCE_THRESHOLD = 0.1

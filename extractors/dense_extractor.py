@@ -12,7 +12,7 @@ from pathlib import Path
 from extractors.base import BaseExtractor
 from config import (
     MAX_IMAGE_DIM, LOFTR_CONFIDENCE_THRESHOLD,
-    ROMA_MAX_KEYPOINTS_PER_PAIR, ROMA_CONFIDENCE_THRESHOLD,
+    ROMA_MAX_KEYPOINTS_PER_PAIR,
     DKM_MAX_KEYPOINTS_PER_PAIR,
 )
 
@@ -236,29 +236,34 @@ class DenseExtractor(BaseExtractor):
                 warp, certainty = self.model.match(im0, im1, batched=True)
                 del im0, im1
 
-                warp_flat = warp.reshape(-1, 4)
-                cert_flat = certainty.reshape(-1)
+                # romatch forces batched=False for PIL input, so warp is
+                # [H, W, 4]; squeeze defensively in case a tensor path returns
+                # [1, H, W, 4]. sample() requires exactly three dimensions.
+                if warp.dim() == 4:
+                    warp, certainty = warp[0], certainty[0]
 
-                mask = cert_flat > ROMA_CONFIDENCE_THRESHOLD
-                warp_good = warp_flat[mask]
-                cert_good = cert_flat[mask]
+                # Use romatch's own sampler rather than a top-k over certainty.
+                # sample() runs in "threshold_balanced" mode: it clamps
+                # certainty above sample_thresh, draws 4N candidates by
+                # multinomial, then resamples N of them weighted by inverse KDE
+                # density. That inverse-density step is what spreads
+                # correspondences over the whole frame. Selecting the N most
+                # certain pixels instead concentrates them in a few
+                # high-texture patches (measured: 22% vs 88% of a 16x16 image
+                # grid occupied), which leaves the pose and triangulation
+                # poorly conditioned and inflates reprojection error.
+                matches, cert = self.model.sample(
+                    warp, certainty, num=ROMA_MAX_KEYPOINTS_PER_PAIR)
 
-                # Free the large dense tensors immediately
-                del warp, certainty, warp_flat, cert_flat, mask
+                del warp, certainty
 
-                if len(warp_good) == 0:
-                    del warp_good, cert_good
+                if matches is None or len(matches) == 0:
                     torch.cuda.empty_cache()
                     return None, None, None
 
-                if len(warp_good) > ROMA_MAX_KEYPOINTS_PER_PAIR:
-                    topk_idx = torch.topk(cert_good, ROMA_MAX_KEYPOINTS_PER_PAIR).indices
-                    warp_good = warp_good[topk_idx]
-                    cert_good = cert_good[topk_idx]
-
-                warp_np = warp_good.cpu().numpy()
-                cert_np = cert_good.cpu().numpy()
-                del warp_good, cert_good
+                warp_np = matches.cpu().numpy()
+                cert_np = cert.cpu().numpy()
+                del matches, cert
 
         except torch.cuda.OutOfMemoryError:
             print(f"    OOM on pair, reloading model and skipping...")
