@@ -4,6 +4,8 @@ from extractors.superpoint_superglue import SuperPointSuperGlueExtractor
 from extractors.lightglue_extractor import LightGlueExtractor
 from extractors.dense_extractor import DenseExtractor
 from extractors.sift_native import NativeColmapExtractor
+from extractors.orb_extractor import ORBExtractor
+from extractors.akaze_extractor import AKAZEExtractor
 
 
 def get_extractor(method, device="cuda"):
@@ -21,6 +23,9 @@ def get_extractor(method, device="cuda"):
         # Native COLMAP (automatic_reconstructor handles full pipeline)
         "sift": lambda: NativeColmapExtractor("sift"),
         "aliked": lambda: NativeColmapExtractor("aliked"),
+        # OpenCV extractors (DB injection)
+        "orb": lambda: ORBExtractor(device),
+        "akaze": lambda: AKAZEExtractor(device),
         # Custom extractors (DB injection + our mapper/MVS)
         "superpoint+superglue": lambda: SuperPointSuperGlueExtractor(device),
         "superpoint+lightglue": lambda: LightGlueExtractor("superpoint", device),
@@ -41,6 +46,8 @@ def get_extractor(method, device="cuda"):
 
 AVAILABLE_METHODS = [
     "sift",
+    "orb",
+    "akaze",
     "aliked",
     "superpoint+superglue",
     "superpoint+lightglue",

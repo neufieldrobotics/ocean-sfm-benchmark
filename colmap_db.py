@@ -33,11 +33,19 @@ def verify_matches_cv2(kps0, kps1, matches, min_inliers=None,
     if matches is None or len(matches) < min_inliers:
         return None, None
 
+    # Validate match indices are within keypoint array bounds
+    if (matches[:, 0].max() >= len(kps0) or matches[:, 1].max() >= len(kps1)
+            or matches[:, 0].min() < 0 or matches[:, 1].min() < 0):
+        return None, None
+
     pts1 = kps0[matches[:, 0]]
     pts2 = kps1[matches[:, 1]]
 
-    F, mask = cv2.findFundamentalMat(pts1, pts2, cv2.FM_RANSAC,
-                                     reproj_thresh, confidence)
+    try:
+        F, mask = cv2.findFundamentalMat(pts1, pts2, cv2.FM_RANSAC,
+                                         reproj_thresh, confidence)
+    except cv2.error:
+        return None, None
     if F is None or mask is None:
         return None, None
 

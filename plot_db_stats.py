@@ -21,6 +21,34 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+# Fixed color map — consistent across runs regardless of which methods appear
+METHOD_COLORS = {
+    "sift":                 "#1f77b4",
+    "aliked":               "#ff7f0e",
+    "superpoint+superglue": "#2ca02c",
+    "superpoint+lightglue": "#d62728",
+    "aliked+lightglue":     "#9467bd",
+    "disk+lightglue":       "#8c564b",
+    "loftr":                "#e377c2",
+    "roma-tiny":            "#7f7f7f",
+    "roma-full":            "#bcbd22",
+    "dkm":                  "#17becf",
+    "orb":                  "#aec7e8",
+    "akaze":                "#ffbb78",
+}
+_FALLBACK_COLORS = plt.cm.Set2(np.linspace(0, 1, 8))
+
+
+def _normalize_label(label):
+    if label.lower() == "roma":
+        return "roma-tiny"
+    return label
+
+
+def _get_color(label):
+    return METHOD_COLORS.get(label, METHOD_COLORS.get(
+        label.lower(), _FALLBACK_COLORS[hash(label) % len(_FALLBACK_COLORS)]))
+
 
 def read_db_stats(db_path):
     """Read keypoint, match, and inlier counts from a COLMAP database."""
@@ -68,7 +96,7 @@ def discover_databases(base_dir):
             continue
         db_path = method_dir / "database.db"
         if db_path.exists():
-            label = method_dir.name.replace("_reconstruction", "")
+            label = _normalize_label(method_dir.name.replace("_reconstruction", ""))
             results[label] = db_path
     return results
 
@@ -93,7 +121,7 @@ def plot_db_stats(base_dir, output="db_stats.png"):
 
     labels = list(all_stats.keys())
     n = len(labels)
-    colors = plt.cm.tab10(np.linspace(0, 1, max(n, 3)))
+    label_colors = [_get_color(l) for l in labels]
 
     fig, axes = plt.subplots(2, 3, figsize=(20, 10))
     fig.suptitle("COLMAP Database Statistics (before reconstruction)",
@@ -102,7 +130,7 @@ def plot_db_stats(base_dir, output="db_stats.png"):
     # 1. Average keypoints per image
     ax = axes[0, 0]
     vals = [all_stats[l]["avg_keypoints"] for l in labels]
-    bars = ax.bar(labels, vals, color=colors[:n])
+    bars = ax.bar(labels, vals, color=label_colors)
     ax.set_title("Avg Keypoints per Image")
     ax.set_ylabel("Count")
     ax.tick_params(axis="x", rotation=30)
@@ -113,7 +141,7 @@ def plot_db_stats(base_dir, output="db_stats.png"):
     # 2. Average raw matches per pair
     ax = axes[0, 1]
     vals = [all_stats[l]["avg_matches"] for l in labels]
-    bars = ax.bar(labels, vals, color=colors[:n])
+    bars = ax.bar(labels, vals, color=label_colors)
     ax.set_title("Avg Raw Matches per Pair")
     ax.set_ylabel("Count")
     ax.tick_params(axis="x", rotation=30)
@@ -124,7 +152,7 @@ def plot_db_stats(base_dir, output="db_stats.png"):
     # 3. Average inliers per pair
     ax = axes[0, 2]
     vals = [all_stats[l]["avg_inliers"] for l in labels]
-    bars = ax.bar(labels, vals, color=colors[:n])
+    bars = ax.bar(labels, vals, color=label_colors)
     ax.set_title("Avg Inlier Matches per Pair")
     ax.set_ylabel("Count")
     ax.tick_params(axis="x", rotation=30)
@@ -135,7 +163,7 @@ def plot_db_stats(base_dir, output="db_stats.png"):
     # 4. Total keypoints
     ax = axes[1, 0]
     vals = [all_stats[l]["total_keypoints"] for l in labels]
-    bars = ax.bar(labels, vals, color=colors[:n])
+    bars = ax.bar(labels, vals, color=label_colors)
     ax.set_title("Total Keypoints (all images)")
     ax.set_ylabel("Count")
     ax.tick_params(axis="x", rotation=30)
@@ -146,7 +174,7 @@ def plot_db_stats(base_dir, output="db_stats.png"):
     # 5. Total raw matches
     ax = axes[1, 1]
     vals = [all_stats[l]["total_matches"] for l in labels]
-    bars = ax.bar(labels, vals, color=colors[:n])
+    bars = ax.bar(labels, vals, color=label_colors)
     ax.set_title("Total Raw Matches (all pairs)")
     ax.set_ylabel("Count")
     ax.tick_params(axis="x", rotation=30)
@@ -158,7 +186,7 @@ def plot_db_stats(base_dir, output="db_stats.png"):
     ax = axes[1, 2]
     data = [all_stats[l]["keypoints"] for l in labels]
     bp = ax.boxplot(data, labels=labels, patch_artist=True, showfliers=False)
-    for patch, c in zip(bp["boxes"], colors[:n]):
+    for patch, c in zip(bp["boxes"], label_colors):
         patch.set_facecolor(c)
     ax.set_title("Keypoints per Image Distribution")
     ax.set_ylabel("Count")
@@ -198,8 +226,10 @@ if __name__ == "__main__":
         description="Plot keypoint/match stats from COLMAP databases")
     parser.add_argument("base_dir",
                         help="Base directory containing method subdirectories")
-    parser.add_argument("--output", "-o", default="db_stats.png",
-                        help="Output plot filename (default: db_stats.png)")
+    parser.add_argument("--output", "-o", default=None,
+                        help="Output plot filename (default: db_stats_<base_dir>.png)")
     args = parser.parse_args()
 
-    plot_db_stats(args.base_dir, args.output)
+    dir_suffix = Path(args.base_dir).resolve().name
+    output = args.output or f"db_stats_{dir_suffix}.png"
+    plot_db_stats(args.base_dir, output)

@@ -29,8 +29,21 @@ class RoMaMatcher(BaseMatcher):
             else:
                 from romatch import tiny_roma_v1_outdoor
                 self.roma = tiny_roma_v1_outdoor(device=device)
+                print(f"Initialized RoMa ({self.variant}) on {device}")
         except Exception as e:
             print(f"RoMa ({self.variant}) init failed: {e}")
+
+    @staticmethod
+    def _load_resized_pil(path):
+        """Load image as PIL, resize to MAX_IMAGE_DIM, round dims to multiples of 14."""
+        img = Image.open(str(path)).convert("RGB")
+        w, h = img.size
+        if max(w, h) > MAX_IMAGE_DIM:
+            scale = MAX_IMAGE_DIM / max(w, h)
+            w, h = int(w * scale), int(h * scale)
+        w = (w // 14) * 14
+        h = (h // 14) * 14
+        return img.resize((w, h), Image.LANCZOS)
 
     def match(self, path0, path1):
         if self.roma is None:
@@ -42,21 +55,9 @@ class RoMaMatcher(BaseMatcher):
         H1, W1 = img1.shape[:2]
 
         with torch.no_grad():
-            if self.variant == "full":
-                warp, certainty = self.roma.match(path0, path1, device=device)
-            else:
-                from torchvision.transforms import ToTensor
-                def _load_resized(path):
-                    img = Image.open(str(path)).convert("RGB")
-                    w, h = img.size
-                    if max(w, h) > MAX_IMAGE_DIM:
-                        scale = MAX_IMAGE_DIM / max(w, h)
-                        img = img.resize((int(w * scale), int(h * scale)),
-                                         Image.LANCZOS)
-                    return ToTensor()(img)[None].to(device)
-                im0 = _load_resized(path0)
-                im1 = _load_resized(path1)
-                warp, certainty = self.roma.match(im0, im1, batched=False)
+            im0 = self._load_resized_pil(path0)
+            im1 = self._load_resized_pil(path1)
+            warp, certainty = self.roma.match(im0, im1, batched=True)
             matches, _ = self.roma.sample(warp, certainty, num=self.num_samples)
 
             mkpts0 = matches[:, :2].cpu().numpy()

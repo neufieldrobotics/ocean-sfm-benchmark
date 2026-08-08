@@ -108,6 +108,17 @@ Harsh-Feature-Bench/
     compare_recons.py            # Reconstruction comparison + timing + keypoint plots
     plot_db_stats.py             # Plot raw match/keypoint stats from COLMAP databases
     environment.yml              # Conda environment (name: benchmark)
+
+    # Paper figure generation (OCEANS 2026)
+    render_pointclouds.py        # Side-by-side sparse reconstructions per method
+    plot_inliers_vs_angle.py     # Verified inliers vs pairwise viewing-angle baseline
+    visualize_matches.py         # Verified correspondences on a representative pair
+    ablate_merge_radius.py       # Merge-radius ablation for dense-matcher aggregation
+
+    paper/                       # OCEANS 2026 full paper (IEEEtran, modular sections)
+        main.tex
+        sections/*.tex
+        figures/*.png
 ```
 
 ## Usage
@@ -152,6 +163,49 @@ Outputs:
 - `viewing_angle_analysis.png` — Pairwise viewing angle and baseline distributions
 - `timing_comparison.png` — Pipeline timing breakdown
 - `keypoint_stats_comparison.png` — Keypoint detection comparison per method
+
+### Generate Paper Figures
+
+```bash
+# Side-by-side sparse reconstructions, one panel per method
+python render_pointclouds.py --base_dir /media/goku/data/hamza/MVS-HyrdoThermal
+
+# Verified inliers vs pairwise viewing-angle baseline (all three datasets)
+python plot_inliers_vs_angle.py
+
+# Verified correspondences on an auto-selected representative image pair
+python visualize_matches.py --dataset MVS-HyrdoThermal --target-angle 20
+```
+
+Figures are written to `paper/figures/` alongside a JSON of the underlying
+numbers. `render_pointclouds.py` and `plot_inliers_vs_angle.py` read COLMAP
+`.bin`/`.db` files directly and need no GPU; `visualize_matches.py` reads the
+verified correspondences straight from each method's `database.db` so the figure
+always matches the reported table.
+
+### Merge-Radius Ablation (dense-matcher aggregation)
+
+Dense matchers need their pixel correspondences aggregated into canonical
+keypoints before COLMAP can form tracks. To check that the 3 px clustering
+radius does not bias results, cache one matching pass and re-aggregate it at
+several radii:
+
+```bash
+# 1. run the dense matcher once, keeping the raw correspondences
+python run_colmap.py --method loftr --images ./1_uav_images \
+    --output /tmp/abl_base --keep-h5 /tmp/abl_pairs.h5
+
+# 2. sweep the merge radius against that cache (matching is NOT re-run)
+python ablate_merge_radius.py --h5 /tmp/abl_pairs.h5 --images ./1_uav_images \
+    --workdir /tmp/abl --radii 0 1 2 3 4 6 8
+
+# quantisation displacement only (fast, no mapper)
+python ablate_merge_radius.py --h5 /tmp/abl_pairs.h5 --images ./1_uav_images \
+    --quant-only
+```
+
+Radius 0 is the no-clustering control. `run_colmap.py` also accepts
+`--merge-radius R` to run the whole pipeline at a non-default radius.
 
 ### Plot Database Statistics
 
@@ -224,6 +278,13 @@ All detectors operate under identical conditions:
 - **Dense matchers** (LoFTR, RoMa, DKM) use `KeypointAggregator` for COLMAP integration — per-image keypoint counts can exceed `MAX_MATCHES_PER_PAIR` due to aggregation across all pairs
 - **DISK** requires a positive `max_num_keypoints` (kornia limitation); set to `MAX_MATCHES_PER_PAIR`
 - COLMAP runs in Docker (via wrapper in `/usr/local/bin/colmap`); the wrapper auto-mounts paths from arguments
+- The Docker wrapper allocates a TTY (`docker run -it`), which **fails under `nohup`, cron or any
+  non-interactive shell** with `the input device is not a TTY`. `colmap/docker/export_colmap_docker.sh`
+  has been updated to add `-it` only when a TTY is attached; re-run it with sudo to install the fix.
+  Until then, wrap batch invocations in a pty: `script -qec "python run_colmap.py ..." /dev/null`
+- Some conda envs load the system `libstdc++` via torch before `sqlite3`, causing
+  `CXXABI_1.3.15 not found`. Work around it with
+  `LD_PRELOAD=$CONDA_PREFIX/lib/libstdc++.so.6`
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` is set automatically to reduce CUDA memory fragmentation
 
 ## License

@@ -219,3 +219,20 @@ __marimo__/
 *.ini
 *.db
 *.json
+# ---- Datasets and large binaries (kept out of git deliberately) ----
+1_uav_images/
+Section-26-PNGs-Win/
+Section-26-PNGs-Win-Sub/
+KITTI_SEQ_20/
+KITTI_SEQ_20_sub3/
+KITTI_SEQ_20_sub4/
+SuperGluePretrainedNetwork/
+benchmark_results/
+*.onnx
+*.ply
+*.h5
+benchmark_log.txt
+
+# ---- Paper figures ARE tracked (override the blanket *.png / *.json above) ----
+!paper/figures/*.png
+!paper/figures/*.json

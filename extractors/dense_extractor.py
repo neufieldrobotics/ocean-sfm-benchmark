@@ -288,12 +288,34 @@ class DenseExtractor(BaseExtractor):
         )
         return pts0[valid], pts1[valid], cert_np[valid] if isinstance(cert_np, np.ndarray) else cert_np
 
+    @staticmethod
+    def _resize_to_temp(path):
+        """Load image, resize to MAX_IMAGE_DIM, save to temp file for DKM's path-based API."""
+        import os, tempfile
+        from PIL import Image
+        img = Image.open(str(path)).convert("RGB")
+        w, h = img.size
+        if max(w, h) > MAX_IMAGE_DIM:
+            scale = MAX_IMAGE_DIM / max(w, h)
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        fd, tmp_path = tempfile.mkstemp(suffix=".jpg")
+        os.close(fd)
+        img.save(tmp_path)
+        return tmp_path
+
     def _match_dkm(self, path0, path1, w0, h0, w1, h1):
-        with torch.no_grad():
-            dense_matches, dense_certainty = self.model.match(
-                str(path0), str(path1), device=self.device)
-            sparse_matches, sparse_cert = self.model.sample(
-                dense_matches, dense_certainty, num=DKM_MAX_KEYPOINTS_PER_PAIR)
+        import os
+        tmp0 = self._resize_to_temp(path0)
+        tmp1 = self._resize_to_temp(path1)
+        try:
+            with torch.no_grad():
+                dense_matches, dense_certainty = self.model.match(
+                    tmp0, tmp1, device=self.device)
+                sparse_matches, sparse_cert = self.model.sample(
+                    dense_matches, dense_certainty, num=DKM_MAX_KEYPOINTS_PER_PAIR)
+        finally:
+            os.unlink(tmp0)
+            os.unlink(tmp1)
 
         mkpts0 = sparse_matches[:, :2].cpu().numpy()
         mkpts1 = sparse_matches[:, 2:].cpu().numpy()

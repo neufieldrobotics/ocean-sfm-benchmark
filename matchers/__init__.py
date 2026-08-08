@@ -8,11 +8,15 @@ from matchers.roma import RoMaMatcher
 from matchers.dkm import DKMMatcher
 from matchers.lightglue_matcher import LightGlueMatcher
 from matchers.disk_bf import DISKBFMatcher
+from matchers.orb import ORBMatcher
+from matchers.akaze import AKAZEMatcher
 
 
 # Registry: name -> factory function
 AVAILABLE_MATCHERS = {
     "sift": lambda: SIFTMatcher(),
+    "orb": lambda: ORBMatcher(),
+    "akaze": lambda: AKAZEMatcher(),
     "superglue": lambda: SuperGlueMatcher(),
     "loftr": lambda: LoFTRMatcher(),
     "aliked": lambda: ALIKEDMatcher(),

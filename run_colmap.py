@@ -21,7 +21,6 @@ from pathlib import Path
 
 from config import DEVICE
 from extractors import get_extractor, AVAILABLE_METHODS
-from extractors.sift_native import NativeColmapExtractor
 from colmap_db import ColmapDatabase
 from colmap_pipeline import (
     setup_output_dirs, discover_images, save_timings, save_keypoint_stats,
@@ -31,7 +30,7 @@ from colmap_pipeline import (
 
 
 def run_single_method(method, image_dir, output_dir, run_dense=False,
-                      quality="high"):
+                      quality="high", merge_radius=None, keep_h5=None):
     """Run full COLMAP pipeline for one method."""
     print(f"\n{'='*70}")
     print(f"  Running: {method}")
@@ -48,8 +47,8 @@ def run_single_method(method, image_dir, output_dir, run_dense=False,
 
     keypoint_counts = {}
 
-    if isinstance(extractor, NativeColmapExtractor):
-        # SIFT / ALIKED native: per-stage timing stored in extractor.timings
+    if getattr(extractor, "is_native", False):
+        # Native-style: extractor handles extraction+matching, stores timings
         extractor.run(image_dir, db_path)
         timings.update(extractor.timings)
         # Read keypoint counts from database
@@ -61,7 +60,9 @@ def run_single_method(method, image_dir, output_dir, run_dense=False,
         db.close()
     elif extractor.is_dense:
         db = ColmapDatabase(db_path)
-        stage_timings, keypoint_counts = run_dense_pipeline(db, extractor, image_paths, device)
+        stage_timings, keypoint_counts = run_dense_pipeline(
+            db, extractor, image_paths, device,
+            merge_radius=merge_radius, h5_path=keep_h5)
         timings.update(stage_timings)
         db.close()
     else:
@@ -103,6 +104,12 @@ def main():
                         help="Output directory (default: ./results/<method>_reconstruction)")
     parser.add_argument("--dense", action="store_true",
                         help="Run dense reconstruction (MVS) stages (off by default)")
+    parser.add_argument("--merge-radius", type=float, default=None,
+                        help="Keypoint clustering radius in px for dense "
+                             "matchers (default: config KEYPOINT_MERGE_RADIUS)")
+    parser.add_argument("--keep-h5", default=None,
+                        help="Persist raw dense correspondences to this HDF5 "
+                             "path so they can be re-aggregated at other radii")
     parser.add_argument("--quality", default="high",
                         choices=["low", "medium", "high", "extreme"],
                         help="Quality level for native COLMAP methods (default: high)")
@@ -126,7 +133,9 @@ def main():
 
         try:
             run_single_method(method, args.images, output_dir,
-                              args.dense, args.quality)
+                              args.dense, args.quality,
+                              merge_radius=args.merge_radius,
+                              keep_h5=args.keep_h5)
         except Exception as e:
             print(f"\nERROR running {method}: {e}")
             import traceback

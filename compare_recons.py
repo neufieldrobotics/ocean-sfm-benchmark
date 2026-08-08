@@ -16,6 +16,37 @@ from collections import defaultdict
 import json
 import argparse
 
+# Fixed color map — consistent across runs regardless of which methods appear
+METHOD_COLORS = {
+    "sift":                 "#1f77b4",  # blue
+    "aliked":               "#ff7f0e",  # orange
+    "superpoint+superglue": "#2ca02c",  # green
+    "superpoint+lightglue": "#d62728",  # red
+    "aliked+lightglue":     "#9467bd",  # purple
+    "disk+lightglue":       "#8c564b",  # brown
+    "loftr":                "#e377c2",  # pink
+    "roma-tiny":            "#7f7f7f",  # grey
+    "roma-full":            "#bcbd22",  # olive
+    "dkm":                  "#17becf",  # cyan
+    "orb":                  "#aec7e8",  # light blue
+    "akaze":                "#ffbb78",  # light orange
+}
+_FALLBACK_COLORS = plt.cm.Set2(np.linspace(0, 1, 8))
+
+
+def _normalize_label(label):
+    """Normalize method labels for consistent display."""
+    # "roma" without qualifier is roma-tiny
+    if label.lower() == "roma":
+        return "roma-tiny"
+    return label
+
+
+def _get_color(label):
+    """Get deterministic color for a method label."""
+    return METHOD_COLORS.get(label, METHOD_COLORS.get(
+        label.lower(), _FALLBACK_COLORS[hash(label) % len(_FALLBACK_COLORS)]))
+
 # Try pycolmap first, fall back to manual parsing
 try:
     import pycolmap
@@ -276,7 +307,7 @@ def compare_reconstructions(recon_dirs, labels=None, output="reconstruction_comp
         all_metrics[label] = extract_metrics(rdir)
 
     n = len(labels)
-    colors = plt.cm.tab10(np.linspace(0, 1, max(n, 3)))
+    label_colors = [_get_color(l) for l in labels]
 
     fig, axes = plt.subplots(2, 3, figsize=(18, 10))
     fig.suptitle("Sparse Reconstruction Comparison", fontsize=16, fontweight="bold")
@@ -284,7 +315,7 @@ def compare_reconstructions(recon_dirs, labels=None, output="reconstruction_comp
     # 1. Number of 3D points
     ax = axes[0, 0]
     vals = [all_metrics[l]["num_points3D"] for l in labels]
-    bars = ax.bar(labels, vals, color=colors[:n])
+    bars = ax.bar(labels, vals, color=label_colors)
     ax.set_title("Number of 3D Points")
     ax.set_ylabel("Count")
     ax.tick_params(axis="x", rotation=30)
@@ -295,7 +326,7 @@ def compare_reconstructions(recon_dirs, labels=None, output="reconstruction_comp
     # 2. Registered images
     ax = axes[0, 1]
     vals = [all_metrics[l]["num_registered_images"] for l in labels]
-    bars = ax.bar(labels, vals, color=colors[:n])
+    bars = ax.bar(labels, vals, color=label_colors)
     ax.set_title("Registered Images")
     ax.set_ylabel("Count")
     ax.tick_params(axis="x", rotation=30)
@@ -307,7 +338,7 @@ def compare_reconstructions(recon_dirs, labels=None, output="reconstruction_comp
     ax = axes[0, 2]
     data = [all_metrics[l]["errors"] for l in labels]
     bp = ax.boxplot(data, labels=labels, patch_artist=True, showfliers=False)
-    for patch, c in zip(bp["boxes"], colors[:n]):
+    for patch, c in zip(bp["boxes"], label_colors):
         patch.set_facecolor(c)
     ax.set_title("Reprojection Error Distribution")
     ax.set_ylabel("Reprojection Error (px)")
@@ -316,7 +347,7 @@ def compare_reconstructions(recon_dirs, labels=None, output="reconstruction_comp
     # 4. Mean reprojection error
     ax = axes[1, 0]
     vals = [all_metrics[l]["mean_reproj_error"] for l in labels]
-    bars = ax.bar(labels, vals, color=colors[:n])
+    bars = ax.bar(labels, vals, color=label_colors)
     ax.set_title("Mean Reprojection Error")
     ax.set_ylabel("Error (px)")
     ax.tick_params(axis="x", rotation=30)
@@ -328,7 +359,7 @@ def compare_reconstructions(recon_dirs, labels=None, output="reconstruction_comp
     ax = axes[1, 1]
     data = [all_metrics[l]["track_lengths"] for l in labels]
     bp = ax.boxplot(data, labels=labels, patch_artist=True, showfliers=False)
-    for patch, c in zip(bp["boxes"], colors[:n]):
+    for patch, c in zip(bp["boxes"], label_colors):
         patch.set_facecolor(c)
     ax.set_title("Track Length Distribution")
     ax.set_ylabel("Track Length")
@@ -337,7 +368,7 @@ def compare_reconstructions(recon_dirs, labels=None, output="reconstruction_comp
     # 6. Mean observations per image
     ax = axes[1, 2]
     vals = [all_metrics[l]["mean_obs_per_image"] for l in labels]
-    bars = ax.bar(labels, vals, color=colors[:n])
+    bars = ax.bar(labels, vals, color=label_colors)
     ax.set_title("Mean Observations per Image")
     ax.set_ylabel("Count")
     ax.tick_params(axis="x", rotation=30)
@@ -380,12 +411,16 @@ def compare_reconstructions(recon_dirs, labels=None, output="reconstruction_comp
         json.dump(json_metrics, f, indent=2)
     print(f"Saved: {json_path}")
 
-    # Pose-based angle analysis
-    _analyze_viewing_angles(all_metrics, labels, output_path.parent)
-    _plot_viewing_angle_vs_inliers(all_metrics, labels, output_path.parent)
+    # Pose-based angle analysis — derive suffix from output filename
+    stem = output_path.stem  # e.g. "reconstruction_comparison_MVS_KITTI"
+    base_stem = "reconstruction_comparison"
+    suffix = stem[len(base_stem):] if stem.startswith(base_stem) else ""
+
+    _analyze_viewing_angles(all_metrics, labels, output_path.parent, suffix)
+    _plot_viewing_angle_vs_inliers(all_metrics, labels, output_path.parent, suffix)
 
 
-def _analyze_viewing_angles(all_metrics, labels, output_dir):
+def _analyze_viewing_angles(all_metrics, labels, output_dir, suffix=""):
     """Analyze pairwise viewing angles from reconstructed camera poses."""
     output_dir = Path(output_dir)
     has_poses = any(len(all_metrics[l]["image_poses"]) >= 2 for l in labels)
@@ -397,8 +432,6 @@ def _analyze_viewing_angles(all_metrics, labels, output_dir):
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle("Viewing Angle Analysis from Camera Poses", fontsize=14, fontweight="bold")
-
-    colors = plt.cm.tab10(np.linspace(0, 1, max(len(labels), 3)))
 
     for idx, label in enumerate(labels):
         poses = all_metrics[label]["image_poses"]
@@ -433,10 +466,11 @@ def _analyze_viewing_angles(all_metrics, labels, output_dir):
         angle_centers = (angle_edges[:-1] + angle_edges[1:]) / 2
         baseline_centers = (baseline_edges[:-1] + baseline_edges[1:]) / 2
 
+        c = _get_color(label)
         axes[0].plot(angle_centers, angle_counts, marker='o', markersize=3,
-                     linewidth=2, label=label, color=colors[idx])
+                     linewidth=2, label=label, color=c)
         axes[1].plot(baseline_centers, baseline_counts, marker='o', markersize=3,
-                     linewidth=2, label=label, color=colors[idx])
+                     linewidth=2, label=label, color=c)
 
         print(f"  {label}: {len(poses)} poses, angle range: "
               f"{angles.min():.1f}-{angles.max():.1f} deg, "
@@ -455,13 +489,13 @@ def _analyze_viewing_angles(all_metrics, labels, output_dir):
     axes[1].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    angle_path = output_dir / "viewing_angle_analysis.png"
+    angle_path = output_dir / f"viewing_angle_analysis{suffix}.png"
     plt.savefig(angle_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Saved: {angle_path}")
 
 
-def _plot_viewing_angle_vs_inliers(all_metrics, labels, output_dir):
+def _plot_viewing_angle_vs_inliers(all_metrics, labels, output_dir, suffix=""):
     """Plot true inliers (from DB) and co-visibility (from reconstruction) vs viewing angle.
 
     4-panel figure:
@@ -495,7 +529,6 @@ def _plot_viewing_angle_vs_inliers(all_metrics, labels, output_dir):
         "Viewing Angle vs Inliers / Co-visibility (per-method)",
         fontsize=14, fontweight="bold"
     )
-    colors = plt.cm.tab10(np.linspace(0, 1, max(len(labels), 3)))
 
     for idx, label in enumerate(labels):
         poses = all_metrics[label]["image_poses"]
@@ -559,7 +592,7 @@ def _plot_viewing_angle_vs_inliers(all_metrics, labels, output_dir):
                 return
             vbc, vm = zip(*valid)
             ax.plot(vbc, vm, marker="o", linewidth=2,
-                    label=label, color=colors[idx])
+                    label=label, color=_get_color(label))
             ax.set_xticks(bin_centers)
             ax.set_xticklabels(bin_tick_labels, rotation=30, ha="right", fontsize=8)
             ax.set_xlabel("Viewing Angle Bin")
@@ -583,7 +616,7 @@ def _plot_viewing_angle_vs_inliers(all_metrics, labels, output_dir):
               f"{n_covis_pairs} pairs with co-visibility data")
 
     plt.tight_layout()
-    out_path = output_dir / "viewing_angle_vs_inliers.png"
+    out_path = output_dir / f"viewing_angle_vs_inliers{suffix}.png"
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Saved: {out_path}")
@@ -603,7 +636,7 @@ def compare_timings(base_dir, output="timing_comparison.png"):
             continue
         timings_file = method_dir / "timings.json"
         if timings_file.exists():
-            label = method_dir.name.replace("_reconstruction", "")
+            label = _normalize_label(method_dir.name.replace("_reconstruction", ""))
             with open(timings_file) as f:
                 all_timings[label] = json.load(f)
 
@@ -645,8 +678,8 @@ def compare_timings(base_dir, output="timing_comparison.png"):
         total = t.get("total", t.get("total_pipeline", sum(t.values())))
         totals.append(total)
 
-    bar_colors = plt.cm.tab10(np.linspace(0, 1, max(n, 3)))
-    bars = ax.barh(labels, totals, color=bar_colors[:n])
+    label_colors = [_get_color(l) for l in labels]
+    bars = ax.barh(labels, totals, color=label_colors)
     ax.set_xlabel("Time (seconds)")
     ax.set_title("Total Pipeline Time")
     for bar, val in zip(bars, totals):
@@ -680,7 +713,7 @@ def compare_timings(base_dir, output="timing_comparison.png"):
     width = 0.8 / n
     for i, label in enumerate(labels):
         vals = [all_timings[label].get(s, 0) for s in key_stages]
-        ax.bar(x + i * width, vals, width, label=label, color=bar_colors[i])
+        ax.bar(x + i * width, vals, width, label=label, color=_get_color(label))
 
     ax.set_xticks(x + width * (n - 1) / 2)
     ax.set_xticklabels([s.replace("_", " ").title() for s in key_stages],
@@ -730,7 +763,7 @@ def compare_keypoint_stats(base_dir, output="keypoint_stats_comparison.png"):
             continue
         stats_file = method_dir / "keypoint_stats.json"
         if stats_file.exists():
-            label = method_dir.name.replace("_reconstruction", "")
+            label = _normalize_label(method_dir.name.replace("_reconstruction", ""))
             with open(stats_file) as f:
                 all_stats[label] = json.load(f)
 
@@ -740,7 +773,7 @@ def compare_keypoint_stats(base_dir, output="keypoint_stats_comparison.png"):
 
     labels = list(all_stats.keys())
     n = len(labels)
-    colors = plt.cm.tab10(np.linspace(0, 1, max(n, 3)))
+    label_colors = [_get_color(l) for l in labels]
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle("Keypoint Detection Comparison", fontsize=16, fontweight="bold")
@@ -748,7 +781,7 @@ def compare_keypoint_stats(base_dir, output="keypoint_stats_comparison.png"):
     # 1. Mean keypoints per image (bar chart)
     ax = axes[0]
     means = [all_stats[l]["mean"] for l in labels]
-    bars = ax.bar(labels, means, color=colors[:n])
+    bars = ax.bar(labels, means, color=label_colors)
     ax.set_title("Mean Keypoints per Image")
     ax.set_ylabel("Count")
     ax.tick_params(axis="x", rotation=30)
@@ -763,7 +796,7 @@ def compare_keypoint_stats(base_dir, output="keypoint_stats_comparison.png"):
         counts = list(all_stats[l]["per_image"].values())
         data.append(counts)
     bp = ax.boxplot(data, labels=labels, patch_artist=True, showfliers=False)
-    for patch, c in zip(bp["boxes"], colors[:n]):
+    for patch, c in zip(bp["boxes"], label_colors):
         patch.set_facecolor(c)
     ax.set_title("Keypoints per Image Distribution")
     ax.set_ylabel("Count")
@@ -790,8 +823,43 @@ def compare_keypoint_stats(base_dir, output="keypoint_stats_comparison.png"):
 # Auto-discovery
 # ============================================================================
 
+def _count_images_in_model(model_dir):
+    """Read the registered-image count from a COLMAP sparse model's images.bin.
+
+    The file header is a uint64 image count — cheap to read regardless of
+    model size.
+    """
+    import struct as _struct
+    images_bin = Path(model_dir) / "images.bin"
+    if not images_bin.exists():
+        # Fall back to file size as a rough proxy for .txt-format models
+        images_txt = Path(model_dir) / "images.txt"
+        return images_txt.stat().st_size if images_txt.exists() else 0
+    try:
+        with open(images_bin, "rb") as f:
+            return _struct.unpack("<Q", f.read(8))[0]
+    except Exception:
+        return 0
+
+
+def _pick_largest_model(candidates):
+    """Pick the sub-model with the most registered images."""
+    best = None
+    best_count = -1
+    for d in candidates:
+        n = _count_images_in_model(d)
+        if n > best_count:
+            best = d
+            best_count = n
+    return best, best_count
+
+
 def discover_reconstructions(base_dir):
-    """Auto-discover reconstruction directories from run_colmap.py output."""
+    """Auto-discover reconstruction directories from run_colmap.py output.
+
+    When COLMAP's mapper produces multiple sub-models (sparse/0, sparse/1, ...)
+    we pick the one with the most registered images, not the latest by index.
+    """
     base_dir = Path(base_dir)
     recon_dirs = []
     labels = []
@@ -800,28 +868,33 @@ def discover_reconstructions(base_dir):
         if not method_dir.is_dir():
             continue
 
-        # Look for sparse/<N>/ pattern — pick the latest (highest-numbered) model
+        label = _normalize_label(
+            method_dir.name.replace("_reconstruction", ""))
+
+        # Look for sparse/<N>/ pattern — pick largest sub-model
         sparse_dir = method_dir / "sparse"
         if sparse_dir.exists():
-            model_dirs = sorted(
-                [d for d in sparse_dir.iterdir()
-                 if d.is_dir() and (d / "points3D.bin").exists()],
-                key=lambda d: int(d.name) if d.name.isdigit() else -1,
-            )
-            if model_dirs:
-                recon_dirs.append(str(model_dirs[-1]))
-                labels.append(method_dir.name.replace("_reconstruction", ""))
+            candidates = [d for d in sparse_dir.iterdir()
+                          if d.is_dir() and (d / "points3D.bin").exists()]
+            best, n = _pick_largest_model(candidates)
+            if best is not None:
+                if len(candidates) > 1:
+                    print(f"  {label}: {len(candidates)} sub-models, "
+                          f"selected {best.name} ({n} images)")
+                recon_dirs.append(str(best))
+                labels.append(label)
                 continue
 
         # Also check direct method_dir/<N>/ pattern
-        model_dirs = sorted(
-            [d for d in method_dir.iterdir()
-             if d.is_dir() and (d / "points3D.bin").exists()],
-            key=lambda d: int(d.name) if d.name.isdigit() else -1,
-        )
-        if model_dirs:
-            recon_dirs.append(str(model_dirs[-1]))
-            labels.append(method_dir.name)
+        candidates = [d for d in method_dir.iterdir()
+                      if d.is_dir() and (d / "points3D.bin").exists()]
+        best, n = _pick_largest_model(candidates)
+        if best is not None:
+            if len(candidates) > 1:
+                print(f"  {method_dir.name}: {len(candidates)} sub-models, "
+                      f"selected {best.name} ({n} images)")
+            recon_dirs.append(str(best))
+            labels.append(_normalize_label(method_dir.name))
 
     return recon_dirs, labels
 
@@ -858,6 +931,12 @@ if __name__ == "__main__":
     else:
         parser.error("Provide --recon_dirs or --base_dir")
 
+    # Derive suffix from base_dir name for unique plot filenames
+    if args.base_dir:
+        dir_suffix = "_" + Path(args.base_dir).resolve().name
+    else:
+        dir_suffix = ""
+
     # Filter to existing
     existing_dirs = []
     existing_labels = []
@@ -873,11 +952,15 @@ if __name__ == "__main__":
     if not existing_dirs:
         print("No reconstruction directories found!")
     else:
-        compare_reconstructions(existing_dirs, existing_labels, args.output)
+        output = str(Path(args.output).with_stem(
+            Path(args.output).stem + dir_suffix))
+        compare_reconstructions(existing_dirs, existing_labels, output)
 
     # Timing comparison (uses timings.json from method dirs)
     if args.base_dir:
         compare_timings(args.base_dir,
-                        output=str(Path(args.output).with_name("timing_comparison.png")))
+                        output=str(Path(args.output).with_name(
+                            f"timing_comparison{dir_suffix}.png")))
         compare_keypoint_stats(args.base_dir,
-                               output=str(Path(args.output).with_name("keypoint_stats_comparison.png")))
+                               output=str(Path(args.output).with_name(
+                                   f"keypoint_stats_comparison{dir_suffix}.png")))

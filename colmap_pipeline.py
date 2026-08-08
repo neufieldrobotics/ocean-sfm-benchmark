@@ -177,10 +177,23 @@ def run_sparse_pipeline(db, extractor, image_paths, device):
     return timings, keypoint_counts
 
 
-def run_dense_pipeline(db, extractor, image_paths, device):
-    """Dense matching pipeline. Returns dict of timings."""
+def run_dense_pipeline(db, extractor, image_paths, device,
+                       merge_radius=None, h5_path=None):
+    """Dense matching pipeline. Returns dict of timings.
+
+    Args:
+        merge_radius: keypoint clustering radius in px. None -> config default.
+        h5_path: persist the raw pair correspondences here instead of using a
+            temp file that is deleted on exit. Lets the expensive matching pass
+            be reused by the merge-radius ablation (see ablate_merge_radius.py).
+    """
     timings = {}
-    aggregator = KeypointAggregator()
+    agg_kwargs = {}
+    if merge_radius is not None:
+        agg_kwargs["merge_radius"] = merge_radius
+    if h5_path is not None:
+        agg_kwargs["h5_path"] = str(h5_path)
+    aggregator = KeypointAggregator(**agg_kwargs)
 
     n_images = len(image_paths)
     total_pairs = n_images * (n_images - 1) // 2
@@ -301,7 +314,8 @@ def run_dense_pipeline(db, extractor, image_paths, device):
     # Collect keypoint counts from aggregated keypoints
     keypoint_counts = {name: len(kps) for name, kps in keypoints_per_image.items()}
 
-    # Free GPU memory
+    # Free HDF5 temp file and GPU memory
+    aggregator.close()
     del feat_cache
     if device == "cuda":
         torch.cuda.empty_cache()
@@ -326,9 +340,13 @@ def run_colmap_mapper(db_path, image_dir, sparse_path, mapper_flags=None):
 
     print("\n=== Sparse Reconstruction (mapper) ===")
     t0 = time.time()
-    subprocess.run(cmd, check=True)
+    result = subprocess.run(cmd)
     elapsed = time.time() - t0
     print(f"  Time: {elapsed:.1f}s")
+    if result.returncode != 0:
+        print(f"ERROR: Mapper exited with code {result.returncode} "
+              f"(too few verified pairs for initialization?)")
+        return None, elapsed
 
     # Find the largest sparse model (most images registered)
     sparse_model_dirs = sorted([

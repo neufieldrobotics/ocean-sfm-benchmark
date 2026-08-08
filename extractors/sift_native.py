@@ -89,7 +89,7 @@ class NativeColmapExtractor:
             "--image_path", image_dir,
             "--FeatureExtraction.max_image_size", str(MAX_IMAGE_DIM),
             "--FeatureExtraction.type", "ALIKED_N16ROT",
-            "--AlikedExtraction.min_score", "0.01",
+            "--AlikedExtraction.min_score", "0.001",
             "--AlikedExtraction.max_num_features", str(MAX_MATCHES_PER_PAIR),
             "--AlikedExtraction.n16rot_model_path", "aliked-n16rot-16k.onnx",
         ], check=True)
