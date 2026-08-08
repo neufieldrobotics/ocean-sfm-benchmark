@@ -270,11 +270,29 @@ class DenseExtractor(BaseExtractor):
                     torch.cuda.empty_cache()
                     return None, None, None
 
-                # sample() draws 4*num candidates without replacement before
-                # the density pass, so num must not exceed a quarter of the
-                # eligible population or multinomial raises.
-                num = max(1, min(ROMA_MAX_KEYPOINTS_PER_PAIR, n_eligible // 4))
-                matches, cert = self.model.sample(warp, certainty, num=num)
+                target = min(ROMA_MAX_KEYPOINTS_PER_PAIR, n_eligible)
+
+                if n_eligible >= 4 * target:
+                    # Enough eligible correspondences for sample() to draw its
+                    # 4x candidate pool without replacement before the density
+                    # pass, so we get full inverse-density balancing.
+                    matches, cert = self.model.sample(warp, certainty, num=target)
+                else:
+                    # Too few to balance. Capping num at n_eligible//4 to satisfy
+                    # sample() would throw away three quarters of the usable
+                    # correspondences, and it bites hardest on wide-baseline
+                    # pairs -- exactly the ones that decide whether an image
+                    # registers. A uniform draw over the eligible pixels keeps
+                    # them all in play; unlike a certainty top-k it does not
+                    # re-concentrate the selection.
+                    flat_w = warp.reshape(-1, 4)
+                    flat_c = certainty.reshape(-1)
+                    elig = torch.nonzero(flat_c > 0, as_tuple=False).squeeze(1)
+                    if elig.numel() > target:
+                        perm = torch.randperm(elig.numel(), device=elig.device)
+                        elig = elig[perm[:target]]
+                    matches, cert = flat_w[elig], flat_c[elig]
+                    del flat_w, flat_c, elig
 
                 del warp, certainty
 
