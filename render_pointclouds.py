@@ -218,7 +218,7 @@ def pca_normalize(xyz, cams=None, lo=1.0, hi=99.0):
 # --------------------------------------------------------------------------
 
 def render_dataset(base_dir, output, color_mode="depth", max_points=120000,
-                   point_size=0.35, clip=(2.5, 97.5)):
+                   point_size=0.35, clip=(2.5, 97.5), ncols=3, panel=3.05):
     base_dir = Path(base_dir)
     suffix = base_dir.resolve().name
 
@@ -239,11 +239,19 @@ def render_dataset(base_dir, output, color_mode="depth", max_points=120000,
         return None
 
     n = len(found)
-    ncols = 3
     nrows = int(np.ceil(n / ncols))
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(3.05 * ncols, 2.95 * nrows))
+    # Panels are square (equal aspect), so the figure's own aspect is set by the
+    # grid shape. A wide, shallow grid costs far less vertical space on the page
+    # than a square one at the same printed width.
+    fig, axes = plt.subplots(nrows, ncols,
+                             figsize=(panel * ncols, (panel - 0.10) * nrows))
     axes = np.atleast_1d(axes).ravel()
+
+    # Scale annotation text with the panel size so labels stay legible when the
+    # grid is widened and each panel shrinks.
+    fs_title = max(6.0, min(9.0, 9.0 * panel / 3.05))
+    fs_note = max(5.0, min(7.2, 7.2 * panel / 3.05))
 
     stats = {}
     for ax, (key, pretty, model) in zip(axes, found):
@@ -329,17 +337,22 @@ def render_dataset(base_dir, output, color_mode="depth", max_points=120000,
             spine.set_edgecolor(c)
             spine.set_linewidth(1.8)
 
-        ax.set_title(f"{pretty}", fontsize=9, color=c, fontweight="bold", pad=3)
+        ax.set_title(f"{pretty}", fontsize=fs_title, color=c, fontweight="bold", pad=2)
         ax.text(0.5, -0.055, f"{nr} imgs · {npts:,} pts",
-                ha="center", va="top", fontsize=7.2, color="#333",
+                ha="center", va="top", fontsize=fs_note, color="#333",
                 transform=ax.transAxes)
 
     for ax in axes[len(found):]:
         ax.axis("off")
 
-    fig.suptitle(DATASET_TITLES.get(suffix, suffix), fontsize=11,
-                 fontweight="bold", y=0.995)
+    fig.suptitle(DATASET_TITLES.get(suffix, suffix),
+                 fontsize=max(8.5, min(11, 11 * panel / 3.05)),
+                 fontweight="bold", y=0.998)
     fig.tight_layout(rect=[0, 0.005, 1, 0.975])
+    # Equal-aspect panels leave slack between columns; reclaiming it lets each
+    # panel be larger for the same figure height, which matters when the grid is
+    # wide and the print size is small.
+    fig.subplots_adjust(wspace=0.04, hspace=0.22)
 
     out = Path(output) if output else Path(f"paper/figures/pointclouds_{suffix}.png")
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -373,7 +386,13 @@ if __name__ == "__main__":
                          "rgb is near-black for underwater/glacier scenes)")
     ap.add_argument("--max_points", type=int, default=120000)
     ap.add_argument("--point_size", type=float, default=0.35)
+    ap.add_argument("--ncols", type=int, default=3,
+                    help="Panels per row. A wide grid (e.g. 5) costs much less "
+                         "vertical space on the page than a square one.")
+    ap.add_argument("--panel", type=float, default=3.05,
+                    help="Panel size in inches (default 3.05)")
     args = ap.parse_args()
 
     render_dataset(args.base_dir, args.output, color_mode=args.color,
-                   max_points=args.max_points, point_size=args.point_size)
+                   max_points=args.max_points, point_size=args.point_size,
+                   ncols=args.ncols, panel=args.panel)

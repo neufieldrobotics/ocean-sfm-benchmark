@@ -242,7 +242,7 @@ def plot(results, output):
     labels = [f"{ANGLE_BINS[i]}–{ANGLE_BINS[i+1]}" for i in range(len(ANGLE_BINS) - 1)]
 
     ncols = len(results)
-    fig, axes = plt.subplots(2, ncols, figsize=(4.15 * ncols, 6.6), sharex="col")
+    fig, axes = plt.subplots(2, ncols, figsize=(4.35 * ncols, 5.15), sharex="col")
     axes = np.atleast_2d(axes)
 
     for c, (ds, title) in enumerate([d for d in DATASETS if d[0] in results]):
@@ -250,8 +250,8 @@ def plot(results, output):
         counts = np.array(R["bin_counts"], dtype=float)
 
         for row, (kmed, ylab) in enumerate(
-                [("mean_inliers", "Mean verified inliers per pair"),
-                 ("success_rate_ge15", r"Fraction of pairs with $\geq$15 inliers")]):
+                [("mean_inliers", "Verified inliers / pair"),
+                 ("success_rate_ge15", r"Frac. pairs $\geq$15 inliers")]):
             ax = axes[row, c]
 
             # Pair-count histogram behind the lines: a bin holding 4 pairs must
@@ -284,7 +284,7 @@ def plot(results, output):
                 ax.set_ylim(-0.03, 1.05)
                 ax.set_xlabel("Pairwise viewing-angle baseline (deg)", fontsize=8.5)
             if c == 0:
-                ax.set_ylabel(ylab, fontsize=9)
+                ax.set_ylabel(ylab, fontsize=8.5)
             ax.grid(True, alpha=0.25, zorder=1)
             ax.set_xticks(centers)
             ax.set_xticklabels(labels, fontsize=7, rotation=45, ha="right")
