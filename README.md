@@ -1,9 +1,10 @@
 # ocean-sfm-benchmark
 
 Code, configurations and measured results for **"Feature Matching for Ocean
-Robotics: A SfM Benchmark Across Marine, Polar, and Aerial Datasets"**
-(IEEE OCEANS 2026), Hamza Naeem, Dennis Giaya and Hanumant Singh,
-Northeastern University Field Robotics.
+Robotics: A SfM Benchmark Across Marine, Polar, and Aerial Datasets"** by
+Hamza Naeem, Dennis Giaya and Hanumant Singh, Northeastern University Field
+Robotics. The paper is under submission to IEEE OCEANS 2026; this README will
+be updated with the citation once it appears.
 
 Nine feature matching pipelines --- SIFT, ORB, AKAZE, SuperPoint+SuperGlue,
 ALIKED, DISK+LightGlue, LoFTR, DKM and RoMa (`tiny_roma_v1_outdoor`) --- are
@@ -159,16 +160,17 @@ Harsh-Feature-Bench/
     plot_db_stats.py             # Plot raw match/keypoint stats from COLMAP databases
     environment.yml              # Conda environment (name: benchmark)
 
-    # Paper figure generation (OCEANS 2026)
+    # Figure and analysis generation
     render_pointclouds.py        # Side-by-side sparse reconstructions per method
     plot_inliers_vs_angle.py     # Verified inliers vs pairwise viewing-angle baseline
     visualize_matches.py         # Verified correspondences on a representative pair
     ablate_merge_radius.py       # Merge-radius ablation for dense-matcher aggregation
+    audit_pose_plausibility.py   # Cross-method pose-consistency audit
 
-    paper/                       # OCEANS 2026 full paper (IEEEtran, modular sections)
-        main.tex
-        sections/*.tex
-        figures/*.png
+    results/                     # Measured outputs behind the reported tables
+        reconstruction_*.json
+        timings/, keypoint_stats/
+        inliers_vs_angle.json, pose_plausibility.json, merge_radius_ablation.json
 ```
 
 ## Usage
@@ -340,13 +342,12 @@ All detectors operate under identical conditions:
 ## Citing
 
 ```bibtex
-@inproceedings{naeem2026oceansfm,
-  title     = {Feature Matching for Ocean Robotics: A {SfM} Benchmark Across
-               Marine, Polar, and Aerial Datasets},
-  author    = {Naeem, Hamza and Giaya, Dennis and Singh, Hanumant},
-  booktitle = {OCEANS},
-  year      = {2026},
-  publisher = {IEEE}
+@unpublished{naeem2026oceansfm,
+  title  = {Feature Matching for Ocean Robotics: A {SfM} Benchmark Across
+            Marine, Polar, and Aerial Datasets},
+  author = {Naeem, Hamza and Giaya, Dennis and Singh, Hanumant},
+  note   = {Submitted to IEEE OCEANS 2026},
+  year   = {2026}
 }
 ```
 

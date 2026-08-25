@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rebuild every COLMAP database and sparse reconstruction reported in
 #   "Feature Matching for Ocean Robotics: A SfM Benchmark Across Marine,
-#    Polar, and Aerial Datasets" (IEEE OCEANS 2026)
+#    Polar, and Aerial Datasets" (under submission to IEEE OCEANS 2026)
 #
 # The databases themselves are not distributed: the three sequences produce
 # 70.4 GB of database.db files, with a single file (hydrothermal DKM) reaching

@@ -1,6 +1,6 @@
 # Provenance
 
-Every number in the OCEANS 2026 paper was produced by the code at the tag
+Every number in the paper was produced by the code at the tag
 **`paper-runs`**, not by the tip of `main`.
 
 ```bash
