@@ -34,6 +34,7 @@ import argparse
 import json
 import sqlite3
 import struct
+import os
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +42,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-DATA = Path("/media/goku/data/hamza")
+DATA = Path(os.environ.get("BENCH_DATA", "/media/goku/data/hamza"))
 
 DATASETS = [
     ("MVS", "Glacier (Svalbard)"),

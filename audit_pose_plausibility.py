@@ -40,11 +40,12 @@ are still compared only where they overlap.
 """
 
 import struct
+import os
 from pathlib import Path
 
 import numpy as np
 
-DATA = Path("/media/goku/data/hamza")
+DATA = Path(os.environ.get("BENCH_DATA", "/media/goku/data/hamza"))
 
 DATASETS = [
     ("MVS", "Glacier", 66),

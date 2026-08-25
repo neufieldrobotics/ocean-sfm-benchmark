@@ -203,4 +203,3 @@ dependencies:
       - typing-inspection==0.4.2
       - urllib3==2.6.3
       - wandb==0.25.1
-prefix: /home/goku/anaconda3/envs/hamza-afr

@@ -1,6 +1,6 @@
 import onnx
 
-model = onnx.load("/home/goku/hamza-workdir/Harsh-Feature-Bench/aliked-n16rot-16k.onnx")
+model = onnx.load("aliked-n16rot-16k.onnx")
 
 # Build a lookup: output_name -> node
 output_to_node = {}
