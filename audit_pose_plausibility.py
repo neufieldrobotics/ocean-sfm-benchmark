@@ -7,24 +7,36 @@ matches can place a camera at a grossly wrong pose. A method can therefore
 report more registered images than a competitor while producing a worse
 trajectory.
 
-We test this without ground truth by exploiting sequence continuity: all three
-datasets are continuous surveys, so two images ADJACENT IN CAPTURE ORDER must
-have camera centres close together relative to the survey's own step size. We
-measure, over adjacent-in-sequence pairs that both registered:
+We test this without ground truth by CROSS-METHOD CONSENSUS. For every pair of
+images adjacent in capture order, each reconstruction that registered both gives
+a distance between the two recovered camera centres. All reconstructions describe
+the same physical camera motion up to a global similarity transform, so after
+dividing each method's steps by its own median step the per-pair values should
+agree across methods. Disagreement localises to whichever reconstruction placed
+the cameras wrongly.
 
-    step_ratio_max = max(step) / median(step)
-    jump_frac      = fraction of steps exceeding 5 x median
+Concretely, for each adjacent pair seen by at least three methods we take the
+across-method median as the consensus, form each method's ratio to it,
+renormalise by that method's median ratio, and report the dispersion of the log
+ratio together with the fraction of pairs deviating by more than 5x and 3x.
 
-Both are scale-invariant and independent of the point cloud, so they are
-comparable across methods whose reconstructions have different arbitrary
-gauges. A smooth survey gives step_ratio_max of order 2-5. Large values mean
-some cameras are placed far from where the sequence says they should be.
+Two properties matter:
 
-Only pairs adjacent in the ORIGINAL image ordering are used, so a method that
-registers a sparse subset is not penalised for the gaps it legitimately skipped.
+  * SPEED-INVARIANT. An earlier version of this diagnostic compared each method's
+    largest consecutive step to its own median, which conflates bad poses with
+    genuinely variable platform speed -- fatal for the hydrothermal survey, where
+    HOV Alvin's velocity varies substantially over the dive. Because the
+    consensus test compares different reconstructions of the SAME pair, the true
+    motion is common to both sides of the comparison and cancels.
 
-Usage:
-    python audit_pose_plausibility.py
+  * NON-CIRCULAR. Scoring against one designated reference would make that
+    reference perfect by construction. Using the across-method median instead
+    means no single reconstruction defines correctness.
+
+Only pairs adjacent in the original ordering are used, so a method that
+registers a sparse subset is not penalised for gaps it legitimately skipped;
+and because the comparison is per-pair, methods registering different subsets
+are still compared only where they overlap.
 """
 
 import struct
@@ -111,22 +123,50 @@ def all_image_names(dataset):
     return best or []
 
 
-def audit(model_dir, order):
-    """step_ratio_max and jump_frac over adjacent-in-sequence registered pairs."""
+def gauge_normalised_steps(model_dir, order):
+    """Consecutive-camera distances, divided by this model's own median step.
+
+    Dividing by the median removes the reconstruction's arbitrary gauge scale, so
+    values are comparable across methods. Returns {index: normalised step} keyed
+    by position in the capture ordering.
+    """
     cams = read_images_bin(Path(model_dir) / "images.bin")
-    pos = {i: n for i, n in enumerate(order)}
-    steps = []
+    d = {}
     for i in range(len(order) - 1):
-        a, b = pos[i], pos[i + 1]
-        if a in cams and b in cams:          # adjacent in capture order, both registered
-            steps.append(float(np.linalg.norm(cams[a] - cams[b])))
-    if len(steps) < 5:
-        return len(cams), len(steps), None, None
-    s = np.array(steps)
-    med = np.median(s)
+        a, b = order[i], order[i + 1]
+        if a in cams and b in cams:
+            d[i] = float(np.linalg.norm(cams[a] - cams[b]))
+    if not d:
+        return {}, len(cams)
+    med = float(np.median(list(d.values())))
     if med <= 0:
-        return len(cams), len(steps), None, None
-    return len(cams), len(steps), float(s.max() / med), float(np.mean(s > 5 * med))
+        return {}, len(cams)
+    return {i: v / med for i, v in d.items()}, len(cams)
+
+
+def consensus_audit(per_method, min_methods=3):
+    """Deviation of each method's steps from the across-method consensus.
+
+    Returns {name: (n_pairs, log_dispersion, frac_gt5x, frac_gt3x)}.
+    """
+    allp = set().union(*[set(v) for v in per_method.values()]) if per_method else set()
+    consensus = {
+        i: float(np.median([per_method[n][i] for n in per_method if i in per_method[n]]))
+        for i in allp
+        if sum(i in per_method[n] for n in per_method) >= min_methods
+    }
+    out = {}
+    for name, d in per_method.items():
+        common = [i for i in d if i in consensus and consensus[i] > 0]
+        if len(common) < 10:
+            out[name] = (len(common), None, None, None)
+            continue
+        r = np.array([d[i] / consensus[i] for i in common])
+        r = r / np.median(r)          # a method may sit at a constant offset
+        out[name] = (len(common), float(np.std(np.log(r))),
+                     float(np.mean((r > 5) | (r < 0.2))),
+                     float(np.mean((r > 3) | (r < 1 / 3))))
+    return out
 
 
 if __name__ == "__main__":
@@ -136,33 +176,44 @@ if __name__ == "__main__":
         order = all_image_names(ds)
         if not order:
             continue
-        print(f"\n=== {pretty} ({total} images) ===")
-        print(f"  {'method':<12}{'Nr':>7}{'adj pairs':>11}{'max/med step':>14}{'jumps>5x':>10}")
-        print("  " + "-" * 54)
-        rows = []
+
+        per_method, nreg = {}, {}
         for k, name in METHODS:
             m = largest_model(DATA / ds / k)
             if m is None:
                 continue
-            rows.append((name,) + audit(m, order))
+            per_method[name], nreg[name] = gauge_normalised_steps(m, order)
         for base, alt, k, name in EXTRA:
             if base != ds:
                 continue
             m = largest_model(DATA / alt / k)
             if m is not None:
-                rows.append((name,) + audit(m, order))
+                per_method[name], nreg[name] = gauge_normalised_steps(m, order)
+
+        # Variant re-runs are diagnostics, not part of the consensus itself
+        core = {n: v for n, v in per_method.items() if "*" not in n}
+        audited = consensus_audit({**core})
+        for n, v in per_method.items():
+            if "*" in n:
+                audited.update(consensus_audit({**core, n: v}))
+
+        print(f"\n=== {pretty} ({total} images) ===")
+        print(f"  {'method':<12}{'Nr':>5}{'pairs':>7}{'log-disp':>10}"
+              f"{'>5x off':>9}{'>3x off':>9}")
+        print("  " + "-" * 52)
         results[pretty] = {}
-        for name, nr, npair, ratio, jf in rows:
-            r = f"{ratio:>14.1f}" if ratio is not None else f"{'-':>14}"
-            j = f"{jf*100:>9.0f}%" if jf is not None else f"{'-':>10}"
-            flag = ""
-            if ratio is not None and ratio > 10:
-                flag = "   <-- implausible"
-            print(f"  {name:<12}{nr:>7}{npair:>11}{r}{j}{flag}")
+        rows = sorted(audited.items(),
+                      key=lambda kv: (kv[1][1] is None, kv[1][1] or 0))
+        for name, (npair, disp, f5, f3) in rows:
+            if disp is None:
+                print(f"  {name:<12}{nreg.get(name,0):>5}{npair:>7}   too few pairs")
+            else:
+                flag = "   <-- inconsistent" if f5 and f5 > 0.15 else ""
+                print(f"  {name:<12}{nreg.get(name,0):>5}{npair:>7}{disp:>10.2f}"
+                      f"{f5*100:>8.1f}%{f3*100:>8.1f}%{flag}")
             results[pretty][name] = {
-                "registered": nr, "adjacent_pairs": npair,
-                "max_over_median_step": ratio,
-                "jump_fraction_gt5x": jf,
+                "registered": nreg.get(name, 0), "consensus_pairs": npair,
+                "log_dispersion": disp, "frac_gt5x": f5, "frac_gt3x": f3,
                 "total_images": total,
             }
 

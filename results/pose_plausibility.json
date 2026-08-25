@@ -1,0 +1,248 @@
+{
+  "Glacier": {
+    "SP+SG": {
+      "registered": 63,
+      "consensus_pairs": 61,
+      "log_dispersion": 0.15770515336784424,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.0,
+      "total_images": 66
+    },
+    "AKAZE": {
+      "registered": 58,
+      "consensus_pairs": 54,
+      "log_dispersion": 0.16711740430538108,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.0,
+      "total_images": 66
+    },
+    "LoFTR": {
+      "registered": 63,
+      "consensus_pairs": 61,
+      "log_dispersion": 0.17795870198824953,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.0,
+      "total_images": 66
+    },
+    "DISK+LG": {
+      "registered": 63,
+      "consensus_pairs": 61,
+      "log_dispersion": 0.18661011469733638,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.0,
+      "total_images": 66
+    },
+    "ORB": {
+      "registered": 64,
+      "consensus_pairs": 62,
+      "log_dispersion": 0.3723885464366877,
+      "frac_gt5x": 0.016129032258064516,
+      "frac_gt3x": 0.016129032258064516,
+      "total_images": 66
+    },
+    "RoMa*fixed": {
+      "registered": 66,
+      "consensus_pairs": 65,
+      "log_dispersion": 0.4406209433320526,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.046153846153846156,
+      "total_images": 66
+    },
+    "RoMa": {
+      "registered": 66,
+      "consensus_pairs": 65,
+      "log_dispersion": 0.4557087839969766,
+      "frac_gt5x": 0.03076923076923077,
+      "frac_gt3x": 0.06153846153846154,
+      "total_images": 66
+    },
+    "ALIKED": {
+      "registered": 63,
+      "consensus_pairs": 61,
+      "log_dispersion": 0.5433740916532538,
+      "frac_gt5x": 0.01639344262295082,
+      "frac_gt3x": 0.01639344262295082,
+      "total_images": 66
+    },
+    "SIFT": {
+      "registered": 66,
+      "consensus_pairs": 65,
+      "log_dispersion": 0.5757332507305991,
+      "frac_gt5x": 0.015384615384615385,
+      "frac_gt3x": 0.03076923076923077,
+      "total_images": 66
+    },
+    "DKM": {
+      "registered": 66,
+      "consensus_pairs": 65,
+      "log_dispersion": 0.580654534534173,
+      "frac_gt5x": 0.03076923076923077,
+      "frac_gt3x": 0.06153846153846154,
+      "total_images": 66
+    }
+  },
+  "Hydrothermal": {
+    "SP+SG": {
+      "registered": 42,
+      "consensus_pairs": 37,
+      "log_dispersion": 0.15568874233326635,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.0,
+      "total_images": 108
+    },
+    "SIFT": {
+      "registered": 47,
+      "consensus_pairs": 42,
+      "log_dispersion": 0.22109671084687335,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.0,
+      "total_images": 108
+    },
+    "DISK+LG": {
+      "registered": 77,
+      "consensus_pairs": 71,
+      "log_dispersion": 0.22330031959943417,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.0,
+      "total_images": 108
+    },
+    "DKM": {
+      "registered": 54,
+      "consensus_pairs": 50,
+      "log_dispersion": 0.31007088012825684,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.02,
+      "total_images": 108
+    },
+    "ALIKED": {
+      "registered": 99,
+      "consensus_pairs": 95,
+      "log_dispersion": 0.4352494752265616,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.042105263157894736,
+      "total_images": 108
+    },
+    "LoFTR": {
+      "registered": 38,
+      "consensus_pairs": 35,
+      "log_dispersion": 0.4591421677206286,
+      "frac_gt5x": 0.02857142857142857,
+      "frac_gt3x": 0.02857142857142857,
+      "total_images": 108
+    },
+    "AKAZE": {
+      "registered": 23,
+      "consensus_pairs": 19,
+      "log_dispersion": 0.5499638353517498,
+      "frac_gt5x": 0.05263157894736842,
+      "frac_gt3x": 0.10526315789473684,
+      "total_images": 108
+    },
+    "ORB": {
+      "registered": 25,
+      "consensus_pairs": 22,
+      "log_dispersion": 0.6547432527060096,
+      "frac_gt5x": 0.045454545454545456,
+      "frac_gt3x": 0.13636363636363635,
+      "total_images": 108
+    },
+    "RoMa*fixed": {
+      "registered": 107,
+      "consensus_pairs": 96,
+      "log_dispersion": 1.301061364120128,
+      "frac_gt5x": 0.25,
+      "frac_gt3x": 0.375,
+      "total_images": 108
+    },
+    "RoMa": {
+      "registered": 108,
+      "consensus_pairs": 98,
+      "log_dispersion": 3.4615214605116975,
+      "frac_gt5x": 0.2755102040816326,
+      "frac_gt3x": 0.3469387755102041,
+      "total_images": 108
+    }
+  },
+  "City Hall": {
+    "DISK+LG": {
+      "registered": 65,
+      "consensus_pairs": 64,
+      "log_dispersion": 0.33780922926480944,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.03125,
+      "total_images": 65
+    },
+    "SIFT": {
+      "registered": 65,
+      "consensus_pairs": 64,
+      "log_dispersion": 0.3386397708385048,
+      "frac_gt5x": 0.015625,
+      "frac_gt3x": 0.03125,
+      "total_images": 65
+    },
+    "ALIKED": {
+      "registered": 65,
+      "consensus_pairs": 64,
+      "log_dispersion": 0.3562865824991232,
+      "frac_gt5x": 0.015625,
+      "frac_gt3x": 0.03125,
+      "total_images": 65
+    },
+    "ORB": {
+      "registered": 50,
+      "consensus_pairs": 47,
+      "log_dispersion": 0.40009065180637265,
+      "frac_gt5x": 0.0,
+      "frac_gt3x": 0.0425531914893617,
+      "total_images": 65
+    },
+    "DKM": {
+      "registered": 65,
+      "consensus_pairs": 64,
+      "log_dispersion": 0.7311632561333455,
+      "frac_gt5x": 0.046875,
+      "frac_gt3x": 0.1875,
+      "total_images": 65
+    },
+    "AKAZE": {
+      "registered": 52,
+      "consensus_pairs": 49,
+      "log_dispersion": 0.7865312437477374,
+      "frac_gt5x": 0.08163265306122448,
+      "frac_gt3x": 0.10204081632653061,
+      "total_images": 65
+    },
+    "RoMa": {
+      "registered": 65,
+      "consensus_pairs": 64,
+      "log_dispersion": 0.9912403395174553,
+      "frac_gt5x": 0.078125,
+      "frac_gt3x": 0.296875,
+      "total_images": 65
+    },
+    "RoMa*fixed": {
+      "registered": 65,
+      "consensus_pairs": 64,
+      "log_dispersion": 0.9930954040763316,
+      "frac_gt5x": 0.125,
+      "frac_gt3x": 0.28125,
+      "total_images": 65
+    },
+    "LoFTR": {
+      "registered": 65,
+      "consensus_pairs": 64,
+      "log_dispersion": 1.064670304959761,
+      "frac_gt5x": 0.09375,
+      "frac_gt3x": 0.203125,
+      "total_images": 65
+    },
+    "SP+SG": {
+      "registered": 65,
+      "consensus_pairs": 64,
+      "log_dispersion": 2.384198355010644,
+      "frac_gt5x": 0.015625,
+      "frac_gt3x": 0.03125,
+      "total_images": 65
+    }
+  }
+}

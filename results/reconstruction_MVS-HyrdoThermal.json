@@ -1,0 +1,74 @@
+{
+  "sift": {
+    "registered_images": 47,
+    "num_points3D": 20031,
+    "model": "MVS-HyrdoThermal/sift/sparse/0",
+    "mean_track_length": 4.05791023912935,
+    "mean_reproj_error": 1.2376810255782429,
+    "spread_ratio_p99_over_p50": 5.57
+  },
+  "orb": {
+    "registered_images": 25,
+    "num_points3D": 5815,
+    "model": "MVS-HyrdoThermal/orb/sparse/3",
+    "mean_track_length": 3.706964746345658,
+    "mean_reproj_error": 1.3584590456262995,
+    "spread_ratio_p99_over_p50": 4.93
+  },
+  "akaze": {
+    "registered_images": 23,
+    "num_points3D": 3013,
+    "model": "MVS-HyrdoThermal/akaze/sparse/1",
+    "mean_track_length": 3.813143046797212,
+    "mean_reproj_error": 1.24022490216406,
+    "spread_ratio_p99_over_p50": 2.55
+  },
+  "superpoint+superglue": {
+    "registered_images": 42,
+    "num_points3D": 15489,
+    "model": "MVS-HyrdoThermal/superpoint+superglue/sparse/2",
+    "mean_track_length": 2.6914584543869844,
+    "mean_reproj_error": 1.3748202200968442,
+    "spread_ratio_p99_over_p50": 2.08
+  },
+  "aliked": {
+    "registered_images": 99,
+    "num_points3D": 70719,
+    "model": "MVS-HyrdoThermal/aliked/sparse/0",
+    "mean_track_length": 3.733084461035931,
+    "mean_reproj_error": 1.376863250384087,
+    "spread_ratio_p99_over_p50": 3.71
+  },
+  "disk+lightglue": {
+    "registered_images": 77,
+    "num_points3D": 56471,
+    "model": "MVS-HyrdoThermal/disk+lightglue/sparse/1",
+    "mean_track_length": 4.280373997272936,
+    "mean_reproj_error": 1.3367423641517737,
+    "spread_ratio_p99_over_p50": 3.43
+  },
+  "loftr": {
+    "registered_images": 38,
+    "num_points3D": 47051,
+    "model": "MVS-HyrdoThermal/loftr/sparse/0",
+    "mean_track_length": 3.6966483177828313,
+    "mean_reproj_error": 1.3337131179833344,
+    "spread_ratio_p99_over_p50": 3.44
+  },
+  "roma-tiny": {
+    "registered_images": 108,
+    "num_points3D": 192445,
+    "model": "MVS-HyrdoThermal/roma/sparse/1",
+    "mean_track_length": 5.785476369871912,
+    "mean_reproj_error": 1.5383263669546376,
+    "spread_ratio_p99_over_p50": 6.88
+  },
+  "dkm": {
+    "registered_images": 54,
+    "num_points3D": 242350,
+    "model": "MVS-HyrdoThermal/dkm/sparse/0",
+    "mean_track_length": 2.5223313389725606,
+    "mean_reproj_error": 1.2525856469378944,
+    "spread_ratio_p99_over_p50": 5.6
+  }
+}

@@ -1,6 +1,56 @@
-# Harsh-Feature-Bench
+# ocean-sfm-benchmark
 
-A comprehensive benchmarking framework for evaluating feature detectors and descriptors on challenging aerial/glacier imagery. Compares traditional (SIFT) and learned (SuperPoint, ALIKED, DISK, LoFTR, RoMa, DKM) methods across feature matching quality, COLMAP 3D reconstruction, and viewpoint resilience.
+Code, configurations and measured results for **"Feature Matching for Ocean
+Robotics: A SfM Benchmark Across Marine, Polar, and Aerial Datasets"**
+(IEEE OCEANS 2026), Hamza Naeem, Dennis Giaya and Hanumant Singh,
+Northeastern University Field Robotics.
+
+Nine feature matching pipelines --- SIFT, ORB, AKAZE, SuperPoint+SuperGlue,
+ALIKED, DISK+LightGlue, LoFTR, DKM and RoMa (`tiny_roma_v1_outdoor`) --- are
+evaluated inside a single controlled COLMAP SfM framework on three sequences: a
+UAV pass over a marine-terminating glacier in Svalbard, a deep-sea photographic
+survey of the Bio9 hydrothermal vent on the East Pacific Rise, and a UAV orbit
+around a heritage building as an in-distribution control. Every pipeline runs
+under identical resolution, keypoint and match budgets, and geometric
+verification settings, so differences reflect the matching front end rather
+than per-method tuning.
+
+> **Reproducing the paper: check out the tag `paper-runs`.** The tip of `main`
+> contains a later change to RoMa's correspondence selection that postdates
+> every reported run. See [PROVENANCE.md](PROVENANCE.md).
+
+## What is and is not in this repository
+
+Measured results are in [`results/`](results/): registered images, triangulated
+point counts, reprojection error, per-stage timings, keypoint statistics,
+inliers as a function of viewing-angle baseline, the merge-radius ablation, and
+the cross-method pose-consistency audit.
+
+The COLMAP databases are **not** distributed. The three sequences produce
+70.4 GB of `database.db` files, and the hydrothermal DKM database alone is
+24 GB — well past what GitHub can host. Regenerate them from the source
+imagery:
+
+```bash
+./run_benchmark.sh /path/to/MVS-HyrdoThermal /path/to/output
+```
+
+Source imagery is not redistributed here either. The City Hall sequence is from
+the Heritage3DMTL dataset (Shende et al., 2024).
+
+### Expected runtimes
+
+One NVIDIA GPU, per sequence. The dense matchers dominate; budget accordingly
+before launching a full sweep.
+
+| | Glacier (66 img) | Hydrothermal (108 img) | City Hall (65 img) |
+|---|---|---|---|
+| SIFT | 3.3 min | 3.2 min | 1.8 min |
+| ALIKED | 10.3 min | 27.4 min | 8.6 min |
+| DISK+LightGlue | 5.7 min | 7.6 min | 3.4 min |
+| LoFTR | 61.7 min | 92.6 min | 27.2 min |
+| DKM | 79.3 min | 174.4 min | 50.3 min |
+| RoMa | 152.2 min | **548.8 min (9.1 h)** | 196.9 min |
 
 ## Setup
 
@@ -9,9 +59,9 @@ A comprehensive benchmarking framework for evaluating feature detectors and desc
 conda env create -f environment.yml
 conda activate benchmark
 
-# COLMAP 4.0+ must be available in PATH
-# If using Docker-based COLMAP, run the export script:
-bash ~/hamza-workdir/colmap/docker/export_colmap_docker.sh
+# COLMAP 3.8+ must be available in PATH as `colmap`
+# (a Docker-backed wrapper script on PATH works too; set COLMAP_BIN in
+#  config.py if the binary is named differently)
 
 # SuperGlue is auto-cloned on first use from:
 # https://github.com/magicleap/SuperGluePretrainedNetwork
@@ -287,6 +337,21 @@ All detectors operate under identical conditions:
   `LD_PRELOAD=$CONDA_PREFIX/lib/libstdc++.so.6`
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` is set automatically to reduce CUDA memory fragmentation
 
+## Citing
+
+```bibtex
+@inproceedings{naeem2026oceansfm,
+  title     = {Feature Matching for Ocean Robotics: A {SfM} Benchmark Across
+               Marine, Polar, and Aerial Datasets},
+  author    = {Naeem, Hamza and Giaya, Dennis and Singh, Hanumant},
+  booktitle = {OCEANS},
+  year      = {2026},
+  publisher = {IEEE}
+}
+```
+
 ## License
 
-MIT
+MIT for the code in this repository. The bundled ALIKED ONNX weights
+(`aliked-n16rot*.onnx`) and any third-party matchers installed via
+`environment.yml` remain under their own licences.

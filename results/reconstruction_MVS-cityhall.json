@@ -1,0 +1,74 @@
+{
+  "sift": {
+    "registered_images": 65,
+    "num_points3D": 63037,
+    "model": "MVS-cityhall/sift/sparse/0",
+    "mean_track_length": 4.534765296571854,
+    "mean_reproj_error": 0.9805847630653586,
+    "spread_ratio_p99_over_p50": 3.61
+  },
+  "orb": {
+    "registered_images": 50,
+    "num_points3D": 12072,
+    "model": "MVS-cityhall/orb/sparse/0",
+    "mean_track_length": 3.838220675944334,
+    "mean_reproj_error": 1.3022237369694183,
+    "spread_ratio_p99_over_p50": 2.09
+  },
+  "akaze": {
+    "registered_images": 52,
+    "num_points3D": 9703,
+    "model": "MVS-cityhall/akaze/sparse/0",
+    "mean_track_length": 3.927135937338967,
+    "mean_reproj_error": 1.0898969426014922,
+    "spread_ratio_p99_over_p50": 1.89
+  },
+  "superpoint+superglue": {
+    "registered_images": 65,
+    "num_points3D": 45736,
+    "model": "MVS-cityhall/superpoint+superglue/sparse/0",
+    "mean_track_length": 3.3806192058772084,
+    "mean_reproj_error": 1.3312601466193867,
+    "spread_ratio_p99_over_p50": 3.95
+  },
+  "aliked": {
+    "registered_images": 65,
+    "num_points3D": 69432,
+    "model": "MVS-cityhall/aliked/sparse/0",
+    "mean_track_length": 5.312881668394977,
+    "mean_reproj_error": 1.0917277870393687,
+    "spread_ratio_p99_over_p50": 3.95
+  },
+  "disk+lightglue": {
+    "registered_images": 65,
+    "num_points3D": 67323,
+    "model": "MVS-cityhall/disk+lightglue/sparse/0",
+    "mean_track_length": 4.5930662626442675,
+    "mean_reproj_error": 1.2649409185761011,
+    "spread_ratio_p99_over_p50": 3.65
+  },
+  "loftr": {
+    "registered_images": 65,
+    "num_points3D": 204950,
+    "model": "MVS-cityhall/loftr/sparse/0",
+    "mean_track_length": 4.2672359111978535,
+    "mean_reproj_error": 1.1949580291407609,
+    "spread_ratio_p99_over_p50": 6.96
+  },
+  "roma-tiny": {
+    "registered_images": 65,
+    "num_points3D": 93526,
+    "model": "MVS-cityhall/roma/sparse/1",
+    "mean_track_length": 6.624874366486325,
+    "mean_reproj_error": 1.7646002085775945,
+    "spread_ratio_p99_over_p50": 3.0
+  },
+  "dkm": {
+    "registered_images": 65,
+    "num_points3D": 189857,
+    "model": "MVS-cityhall/dkm/sparse/0",
+    "mean_track_length": 2.7201156660012535,
+    "mean_reproj_error": 1.1556939513357904,
+    "spread_ratio_p99_over_p50": 5.65
+  }
+}

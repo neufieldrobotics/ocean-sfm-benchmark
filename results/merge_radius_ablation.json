@@ -1,0 +1,181 @@
+{
+  "sweep": [
+    {
+      "radius": 0.0,
+      "mean_keypoints_per_image": 38932.242424242424,
+      "total_keypoints": 1284764,
+      "verified_pairs": 129,
+      "total_pairs": 528,
+      "t_aggregate_s": 10.3,
+      "t_geometric_verification_s": 4.3,
+      "t_mapper_s": 187.6,
+      "registered_images": 23,
+      "num_points3D": 61548,
+      "mean_reproj_error": 1.1912996031097656,
+      "median_reproj_error": 1.120221372344792,
+      "mean_track_length": 2.906252030935205,
+      "model": "/tmp/claude-1000/-home-goku-hamza-workdir-Harsh-Feature-Bench/d181a906-62f1-4206-8bb1-15ce18d0020e/scratchpad/abl3/work/r0/sparse/1"
+    },
+    {
+      "radius": 1.0,
+      "mean_keypoints_per_image": 37876.181818181816,
+      "total_keypoints": 1249914,
+      "verified_pairs": 129,
+      "total_pairs": 528,
+      "t_aggregate_s": 10.3,
+      "t_geometric_verification_s": 4.3,
+      "t_mapper_s": 208.1,
+      "registered_images": 33,
+      "num_points3D": 96124,
+      "mean_reproj_error": 1.1624469057903866,
+      "median_reproj_error": 1.105282524043285,
+      "mean_track_length": 2.815904456743373,
+      "model": "/tmp/claude-1000/-home-goku-hamza-workdir-Harsh-Feature-Bench/d181a906-62f1-4206-8bb1-15ce18d0020e/scratchpad/abl3/work/r1/sparse/1"
+    },
+    {
+      "radius": 2.0,
+      "mean_keypoints_per_image": 35440.69696969697,
+      "total_keypoints": 1169543,
+      "verified_pairs": 129,
+      "total_pairs": 528,
+      "t_aggregate_s": 9.5,
+      "t_geometric_verification_s": 4.3,
+      "t_mapper_s": 226.7,
+      "registered_images": 33,
+      "num_points3D": 91875,
+      "mean_reproj_error": 1.1723471754662707,
+      "median_reproj_error": 1.1292309247426704,
+      "mean_track_length": 2.8543455782312925,
+      "model": "/tmp/claude-1000/-home-goku-hamza-workdir-Harsh-Feature-Bench/d181a906-62f1-4206-8bb1-15ce18d0020e/scratchpad/abl3/work/r2/sparse/1"
+    },
+    {
+      "radius": 3.0,
+      "mean_keypoints_per_image": 32590.636363636364,
+      "total_keypoints": 1075491,
+      "verified_pairs": 129,
+      "total_pairs": 528,
+      "t_aggregate_s": 8.9,
+      "t_geometric_verification_s": 4.3,
+      "t_mapper_s": 267.4,
+      "registered_images": 33,
+      "num_points3D": 86585,
+      "mean_reproj_error": 1.1821111965617177,
+      "median_reproj_error": 1.1463065670379335,
+      "mean_track_length": 2.94027833920425,
+      "model": "/tmp/claude-1000/-home-goku-hamza-workdir-Harsh-Feature-Bench/d181a906-62f1-4206-8bb1-15ce18d0020e/scratchpad/abl3/work/r3/sparse/0"
+    },
+    {
+      "radius": 4.0,
+      "mean_keypoints_per_image": 29775.545454545456,
+      "total_keypoints": 982593,
+      "verified_pairs": 127,
+      "total_pairs": 528,
+      "t_aggregate_s": 8.4,
+      "t_geometric_verification_s": 4.4,
+      "t_mapper_s": 181.5,
+      "registered_images": 33,
+      "num_points3D": 90213,
+      "mean_reproj_error": 1.1792695671123785,
+      "median_reproj_error": 1.1354482451774306,
+      "mean_track_length": 2.8224535266535864,
+      "model": "/tmp/claude-1000/-home-goku-hamza-workdir-Harsh-Feature-Bench/d181a906-62f1-4206-8bb1-15ce18d0020e/scratchpad/abl3/work/r4/sparse/1"
+    },
+    {
+      "radius": 6.0,
+      "mean_keypoints_per_image": 24740.363636363636,
+      "total_keypoints": 816432,
+      "verified_pairs": 121,
+      "total_pairs": 528,
+      "t_aggregate_s": 7.3,
+      "t_geometric_verification_s": 4.6,
+      "t_mapper_s": 186.3,
+      "registered_images": 33,
+      "num_points3D": 36529,
+      "mean_reproj_error": 1.1691683835066482,
+      "median_reproj_error": 1.1482929605619185,
+      "mean_track_length": 2.7978318596183853,
+      "model": "/tmp/claude-1000/-home-goku-hamza-workdir-Harsh-Feature-Bench/d181a906-62f1-4206-8bb1-15ce18d0020e/scratchpad/abl3/work/r6/sparse/0"
+    },
+    {
+      "radius": 8.0,
+      "mean_keypoints_per_image": 21097.878787878788,
+      "total_keypoints": 696230,
+      "verified_pairs": 111,
+      "total_pairs": 528,
+      "t_aggregate_s": 6.4,
+      "t_geometric_verification_s": 4.9,
+      "t_mapper_s": 154.3,
+      "registered_images": 32,
+      "num_points3D": 50628,
+      "mean_reproj_error": 1.2483862980778537,
+      "median_reproj_error": 1.24106195835394,
+      "mean_track_length": 2.695425456269258,
+      "model": "/tmp/claude-1000/-home-goku-hamza-workdir-Harsh-Feature-Bench/d181a906-62f1-4206-8bb1-15ce18d0020e/scratchpad/abl3/work/r8/sparse/0"
+    }
+  ],
+  "quantisation": [
+    {
+      "radius": 0.0,
+      "n_observations": 658735,
+      "mean_px": 0.0,
+      "median_px": 0.0,
+      "p95_px": 0.0,
+      "max_px": 0.0,
+      "theoretical_uniform_disc_2r_over_3": 0.0
+    },
+    {
+      "radius": 1.0,
+      "n_observations": 658735,
+      "mean_px": 0.012025814667248768,
+      "median_px": 0.0,
+      "p95_px": 0.0,
+      "max_px": 1.5942260367841903,
+      "theoretical_uniform_disc_2r_over_3": 0.6666666666666666
+    },
+    {
+      "radius": 2.0,
+      "n_observations": 658735,
+      "mean_px": 0.07996377039336815,
+      "median_px": 0.0,
+      "p95_px": 0.6977168741403016,
+      "max_px": 3.1898165704231176,
+      "theoretical_uniform_disc_2r_over_3": 1.3333333333333333
+    },
+    {
+      "radius": 3.0,
+      "n_observations": 658735,
+      "mean_px": 0.21762149253410182,
+      "median_px": 0.0,
+      "p95_px": 1.3259809839526735,
+      "max_px": 4.808597042538145,
+      "theoretical_uniform_disc_2r_over_3": 2.0
+    },
+    {
+      "radius": 4.0,
+      "n_observations": 658735,
+      "mean_px": 0.4188099294677901,
+      "median_px": 0.0,
+      "p95_px": 1.9353196314322743,
+      "max_px": 5.988256860025184,
+      "theoretical_uniform_disc_2r_over_3": 2.6666666666666665
+    },
+    {
+      "radius": 6.0,
+      "n_observations": 658735,
+      "mean_px": 0.9517489006181338,
+      "median_px": 0.2738254519779707,
+      "p95_px": 3.4015094782522355,
+      "max_px": 9.320239328391349,
+      "theoretical_uniform_disc_2r_over_3": 4.0
+    },
+    {
+      "radius": 8.0,
+      "n_observations": 658735,
+      "mean_px": 1.470474636944472,
+      "median_px": 0.9649062966525468,
+      "p95_px": 4.671563635835779,
+      "max_px": 10.890681116484703,
+      "theoretical_uniform_disc_2r_over_3": 5.333333333333333
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "sift": {
+    "registered_images": 66,
+    "num_points3D": 70681,
+    "model": "MVS/sift/sparse/0",
+    "mean_track_length": 4.800002829614748,
+    "mean_reproj_error": 1.0735413926255943,
+    "spread_ratio_p99_over_p50": 4.07
+  },
+  "orb": {
+    "registered_images": 64,
+    "num_points3D": 17691,
+    "model": "MVS/orb/sparse/0",
+    "mean_track_length": 3.9142501837092305,
+    "mean_reproj_error": 1.316039494909187,
+    "spread_ratio_p99_over_p50": 2.81
+  },
+  "akaze": {
+    "registered_images": 58,
+    "num_points3D": 12108,
+    "model": "MVS/akaze/sparse/0",
+    "mean_track_length": 3.4443343244136106,
+    "mean_reproj_error": 1.2136247503773123,
+    "spread_ratio_p99_over_p50": 3.06
+  },
+  "superpoint+superglue": {
+    "registered_images": 63,
+    "num_points3D": 37951,
+    "model": "MVS/superpoint+superglue/sparse/0",
+    "mean_track_length": 3.178124423598851,
+    "mean_reproj_error": 1.3607839345103494,
+    "spread_ratio_p99_over_p50": 2.52
+  },
+  "aliked": {
+    "registered_images": 63,
+    "num_points3D": 63422,
+    "model": "MVS/aliked/sparse/0",
+    "mean_track_length": 5.921431049162751,
+    "mean_reproj_error": 1.2138490282105583,
+    "spread_ratio_p99_over_p50": 4.5
+  },
+  "disk+lightglue": {
+    "registered_images": 63,
+    "num_points3D": 63621,
+    "model": "MVS/disk+lightglue/sparse/0",
+    "mean_track_length": 4.961034878420647,
+    "mean_reproj_error": 1.260249966728996,
+    "spread_ratio_p99_over_p50": 2.95
+  },
+  "loftr": {
+    "registered_images": 63,
+    "num_points3D": 215945,
+    "model": "MVS/loftr/sparse/1",
+    "mean_track_length": 3.30612887540809,
+    "mean_reproj_error": 1.190699832817643,
+    "spread_ratio_p99_over_p50": 2.26
+  },
+  "roma-tiny": {
+    "registered_images": 66,
+    "num_points3D": 222191,
+    "model": "MVS/roma/sparse/1",
+    "mean_track_length": 5.580388044520255,
+    "mean_reproj_error": 1.6229507090860809,
+    "spread_ratio_p99_over_p50": 2.55
+  },
+  "dkm": {
+    "registered_images": 66,
+    "num_points3D": 75120,
+    "model": "MVS/dkm/sparse/0",
+    "mean_track_length": 2.246299254526092,
+    "mean_reproj_error": 1.138678856531636,
+    "spread_ratio_p99_over_p50": 2.17
+  }
+}

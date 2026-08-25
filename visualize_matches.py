@@ -253,7 +253,8 @@ def draw_panel(ax, img0, img1, mk0, mk1, label, note, ok=True):
     ax.set_xlabel(note + suffix, fontsize=6.8, labelpad=1.5)
 
 
-def main(dataset, target_angle, output, max_dim=760, brighten=True):
+def main(dataset, target_angle, output, max_dim=760, brighten=True,
+         methods=None, ncols=3):
     imgdir = DATASET_IMAGES[dataset]
     imgdir = Path(imgdir) if str(imgdir).startswith("/") else Path(imgdir).resolve()
 
@@ -283,11 +284,17 @@ def main(dataset, target_angle, output, max_dim=760, brighten=True):
             return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
         img0, img1 = _tone(img0), _tone(img1)
 
-    fig, axes = plt.subplots(3, 3, figsize=(4.1 * 3, 1.8 * 3))
+    panels = ([m for m in PANEL_METHODS if m[0] in methods] if methods
+              else PANEL_METHODS)
+    if methods:   # preserve the order the caller asked for
+        panels = sorted(panels, key=lambda m: list(methods).index(m[0]))
+    nrows = int(np.ceil(len(panels) / ncols))
+    fig, axes = plt.subplots(nrows, ncols,
+                             figsize=(4.1 * ncols, 1.8 * nrows))
     axes = np.atleast_1d(axes).ravel()
 
     summary = []
-    for ax, (key, pretty) in zip(axes, PANEL_METHODS):
+    for ax, (key, pretty) in zip(axes, panels):
         db = DATA / dataset / key / "database.db"
         if not db.exists():
             draw_panel(ax, img0, img1, None, None, pretty, "no database", ok=False)
@@ -316,7 +323,7 @@ def main(dataset, target_angle, output, max_dim=760, brighten=True):
         rtxt = f"({ratio:.1%})" if ratio is not None else "(guided)"
         print(f"  {pretty:<12} raw={n_raw:>6} verified={n_ver:>6} {rtxt}")
 
-    for ax in axes[len(PANEL_METHODS):]:
+    for ax in axes[len(panels):]:
         ax.axis("off")
 
     fig.suptitle(f"{DATASET_TITLE[dataset]} — geometrically verified "
@@ -336,7 +343,11 @@ if __name__ == "__main__":
     ap.add_argument("--output", default=None)
     ap.add_argument("--no-brighten", action="store_true",
                     help="Disable display-only CLAHE tone mapping")
+    ap.add_argument("--methods", nargs="+", default=None,
+                    help="Subset of registry keys to show, in display order")
+    ap.add_argument("--ncols", type=int, default=3)
     args = ap.parse_args()
     main(args.dataset, args.target_angle,
          args.output or f"paper/figures/matches_{args.dataset}.png",
-         brighten=not args.no_brighten)
+         brighten=not args.no_brighten, methods=args.methods,
+         ncols=args.ncols)

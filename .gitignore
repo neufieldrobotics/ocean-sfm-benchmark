@@ -233,6 +233,6 @@ benchmark_results/
 *.h5
 benchmark_log.txt
 
-# ---- Paper figures ARE tracked (override the blanket *.png / *.json above) ----
-!paper/figures/*.png
-!paper/figures/*.json
+# ---- Measured results ARE tracked (override the blanket *.json above) ----
+!results/*.json
+!results/**/*.json
