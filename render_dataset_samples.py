@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 PANELS = [
     ("Glacier (Svalbard)", "Section-26-PNGs-Win/*.png", 0.5, False),
     ("Hydrothermal vent (Bio9)", "/media/goku/data/2025-Bio9-subset/*.png", 0.5, True),
-    ("City Hall (Montreal)", "1_uav_images/*.JPG", 0.5, False),
+    ("City Hall (Westmount)", "1_uav_images/*.JPG", 0.5, False),
 ]
 
 TARGET_ASPECT = 3.0 / 2.0

@@ -77,7 +77,7 @@ METHOD_ORDER = [
 DATASET_TITLES = {
     "MVS": "Glacier (Svalbard, 66 images)",
     "MVS-HyrdoThermal": "Hydrothermal vent (Bio9, 108 images)",
-    "MVS-cityhall": "City Hall (Montreal, 65 images)",
+    "MVS-cityhall": "City Hall (Westmount, 65 images)",
 }
 
 

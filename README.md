@@ -36,8 +36,10 @@ imagery:
 ./run_benchmark.sh /path/to/MVS-HyrdoThermal /path/to/output
 ```
 
-Source imagery is not redistributed here either. The City Hall sequence is from
-the Heritage3DMTL dataset (Shende et al., 2024).
+Source imagery is not redistributed here either. The City Hall sequence is
+`6-Westmount-City-Hall.zip` from the Heritage3DMTL dataset (Shende et al.,
+2024, Zenodo v2, DOI 10.5281/zenodo.13732644) --- Westmount City Hall, not the
+Montreal City Hall capture in the same dataset.
 
 ### Expected runtimes
 

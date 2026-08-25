@@ -42,7 +42,9 @@ Directory names in the code predate the paper's terminology:
 |---|---|
 | `MVS` | Glacier (Svalbard) |
 | `MVS-HyrdoThermal` | Hydrothermal vent (Bio9, East Pacific Rise) |
-| `MVS-cityhall` | City Hall (Montreal) |
+| `MVS-cityhall` | City Hall (Westmount) |
 
 The spelling `HyrdoThermal` is a typo preserved so that the released result
-files match the paths recorded during the runs.
+files match the paths recorded during the runs. Likewise `MVS-cityhall` is
+Westmount City Hall (`6-Westmount-City-Hall.zip` in Heritage3DMTL, images
+DJI_0892--0957), not the Montreal City Hall capture in the same dataset.

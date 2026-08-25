@@ -48,7 +48,7 @@ DATASET_IMAGES = {
 DATASET_TITLE = {
     "MVS": "Glacier (Svalbard)",
     "MVS-HyrdoThermal": "Hydrothermal vent (Bio9)",
-    "MVS-cityhall": "City Hall (Montreal)",
+    "MVS-cityhall": "City Hall (Westmount)",
 }
 
 PANEL_METHODS = [

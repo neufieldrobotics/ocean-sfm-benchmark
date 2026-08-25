@@ -34,7 +34,6 @@ import argparse
 import json
 import sqlite3
 import struct
-import os
 from pathlib import Path
 
 import numpy as np
@@ -42,12 +41,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-DATA = Path(os.environ.get("BENCH_DATA", "/media/goku/data/hamza"))
+DATA = Path("/media/goku/data/hamza")
 
 DATASETS = [
     ("MVS", "Glacier (Svalbard)"),
     ("MVS-HyrdoThermal", "Hydrothermal vent (Bio9)"),
-    ("MVS-cityhall", "City Hall (Montreal)"),
+    ("MVS-cityhall", "City Hall (Westmount)"),
 ]
 
 METHODS = [
@@ -317,7 +316,18 @@ def plot(results, output):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--output", default="paper/figures/inliers_vs_angle.png")
+    ap.add_argument("--replot", action="store_true",
+                    help="Redraw from the saved JSON instead of re-reading the "
+                         "COLMAP databases. Use when only presentation changes.")
     args = ap.parse_args()
+
+    if args.replot:
+        js = Path(args.output).with_suffix(".json")
+        with open(js) as f:
+            results = json.load(f)
+        print(f"Loaded: {js}")
+        plot(results, args.output)
+        raise SystemExit
 
     results = {}
     for ds, title in DATASETS:
