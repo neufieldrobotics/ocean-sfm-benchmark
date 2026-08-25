@@ -1,7 +1,7 @@
 # ocean-sfm-benchmark
 
 Code, configurations and measured results for **"Feature Matching for Ocean
-Robotics: A SfM Benchmark Across Marine, Polar, and Aerial Datasets"** by
+Robotics: An SfM Benchmark Across Marine, Polar, and Aerial Datasets"** by
 Hamza Naeem, Dennis Giaya and Hanumant Singh, Northeastern University Field
 Robotics. The paper is under submission to IEEE OCEANS 2026; this README will
 be updated with the citation once it appears.
@@ -345,7 +345,7 @@ All detectors operate under identical conditions:
 
 ```bibtex
 @unpublished{naeem2026oceansfm,
-  title  = {Feature Matching for Ocean Robotics: A {SfM} Benchmark Across
+  title  = {Feature Matching for Ocean Robotics: An {SfM} Benchmark Across
             Marine, Polar, and Aerial Datasets},
   author = {Naeem, Hamza and Giaya, Dennis and Singh, Hanumant},
   note   = {Submitted to IEEE OCEANS 2026},
